@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="English Writing Trainer — sistem latihan menulis bahasa Inggris: journaling, copywork, extensive reading, draft-correct-rewrite, dan error log.">
+  <title>English Writing Trainer</title>
+  <meta name="theme-color" content="#101418">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>✍️</text></svg>">
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">✍️</div>
+      <div>
+        <div class="brand-name">Writing Trainer</div>
+        <div class="brand-sub">English practice system</div>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="Navigasi utama">
+      <button class="nav-item" data-page="dashboard" aria-current="page">
+        <span class="nav-ico">▦</span> Dashboard
+      </button>
+      <button class="nav-item" data-page="journal">
+        <span class="nav-ico">✎</span> Journaling
+      </button>
+      <button class="nav-item" data-page="copywork">
+        <span class="nav-ico">⧉</span> Copywork
+      </button>
+      <button class="nav-item" data-page="reading">
+        <span class="nav-ico">☰</span> Reading
+      </button>
+      <button class="nav-item" data-page="cycle">
+        <span class="nav-ico">↻</span> Cycle
+      </button>
+      <button class="nav-item" data-page="corrector">
+        <span class="nav-ico">✓</span> Koreksi
+      </button>
+      <button class="nav-item" data-page="errors">
+        <span class="nav-ico">⚑</span> Error Log
+      </button>
+      <button class="nav-item" data-page="plan">
+        <span class="nav-ico">▦</span> Rencana
+      </button>
+      <button class="nav-item" data-page="settings">
+        <span class="nav-ico">⚙</span> Pengaturan
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="streak-chip" id="streakChip" title="Hari berturut-turut dengan minimal 1 aktivitas">
+        <span>🔥</span> <b id="streakChipNum">0</b> hari streak
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="content">
+    <header class="topbar">
+      <div>
+        <h1 id="pageTitle">Dashboard</h1>
+        <p class="topbar-sub" id="pageSub">Ringkasan latihanmu hari ini</p>
+      </div>
+      <div class="date-chip" id="dateChip"></div>
+    </header>
+
+    <!-- ---------- DASHBOARD ---------- -->
+    <section class="page" id="page-dashboard">
+      <div class="card greet-card">
+        <div>
+          <h2 id="greeting">Selamat datang 👋</h2>
+          <p class="sub" id="greetMsg">Kerjakan minimal satu aktivitas hari ini untuk menjaga streak.</p>
+        </div>
+        <div class="row">
+          <button class="btn primary" data-goto="journal">Mulai menulis</button>
+          <button class="btn ghost" data-goto="plan">Lihat rencana</button>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num" id="s-entries">0</div><div class="stat-lbl">Entri journal</div></div>
+        <div class="stat-card"><div class="stat-num" id="s-sessions">0</div><div class="stat-lbl">Sesi cycle</div></div>
+        <div class="stat-card"><div class="stat-num" id="s-copybest">–</div><div class="stat-lbl">Copywork terbaik</div></div>
+        <div class="stat-card"><div class="stat-num" id="s-errors">0</div><div class="stat-lbl">Kesalahan dicatat</div></div>
+        <div class="stat-card"><div class="stat-num" id="s-words">0</div><div class="stat-lbl">Total kata ditulis</div></div>
+      </div>
+
+      <div class="two-col">
+        <div class="card">
+          <h2>Streak 5 minggu</h2>
+          <p class="sub">Klik kotak untuk menandai/menghapus hari (backfill).</p>
+          <div class="cal-head">
+            <span>S</span><span>S</span><span>R</span><span>K</span><span>J</span><span>S</span><span>M</span>
+          </div>
+          <div class="cal" id="calGrid"></div>
+        </div>
+        <div class="card">
+          <h2>Checklist hari ini</h2>
+          <p class="sub">Target minimal: satu dari masing-masing.</p>
+          <div class="check-item">
+            <div class="check-label"><span>✎</span> Journaling</div>
+            <div class="progress"><div class="progress-fill" id="ck-journal"></div></div>
+          </div>
+          <div class="check-item">
+            <div class="check-label"><span>⧉</span> Copywork</div>
+            <div class="progress"><div class="progress-fill" id="ck-copy"></div></div>
+          </div>
+          <div class="check-item">
+            <div class="check-label"><span>☰</span> Reading note</div>
+            <div class="progress"><div class="progress-fill" id="ck-read"></div></div>
+          </div>
+          <div class="check-item">
+            <div class="check-label"><span>↻</span> Cycle</div>
+            <div class="progress"><div class="progress-fill" id="ck-cyc"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- JOURNAL ---------- -->
+    <section class="page hidden" id="page-journal">
+      <div class="card">
+        <h2>Tulis entri hari ini</h2>
+        <p class="sub">Tulis 100–200 kata secara rutin. Draf akan tersimpan otomatis saat kamu mengetik.</p>
+        <div class="prompt-box">
+          <div class="row">
+            <span class="tag" id="promptTag">Opini</span>
+            <button class="btn ghost sm" id="btnPrompt" type="button">↻ Prompt lain</button>
+          </div>
+          <p class="prompt-text" id="promptText"></p>
+        </div>
+        <textarea id="jText" class="textarea" rows="9"
+          placeholder="Write your entry in English here..."></textarea>
+        <div class="editor-foot">
+          <span class="meta" id="jCount">0 kata</span>
+          <span class="meta" id="jDraftFlag" aria-live="polite"></span>
+          <div class="progress slim"><div class="progress-fill" id="jBar"></div></div>
+          <button class="btn primary" id="btnSaveJournal">Simpan entri</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Entri sebelumnya</h2>
+          <input type="search" id="jSearch" class="input sm" placeholder="Cari entri…" aria-label="Cari entri">
+        </div>
+        <div id="jList" class="stack"></div>
+      </div>
+    </section>
+
+    <!-- ---------- COPYWORK ---------- -->
+    <section class="page hidden" id="page-copywork">
+      <div class="card">
+        <h2>Copywork (imitasi)</h2>
+        <p class="sub">Mode <b>Copy</b>: salin teks yang terlihat persis. Mode <b>Recall</b>: baca dulu, sembunyikan, lalu ketik dari ingatan — lebih menantang.</p>
+
+        <div class="row gap8 wrap">
+          <div class="seg" role="group" aria-label="Mode latihan">
+            <button class="seg-btn active" data-mode="copy">Copy</button>
+            <button class="seg-btn" data-mode="recall">Recall</button>
+          </div>
+          <select id="copySelect" class="input" style="max-width:340px;" aria-label="Pilih teks"></select>
+        </div>
+
+        <div id="customWrap" class="hidden">
+          <label class="field-label" for="customCopy">Teks latihanmu (tempel teks bahasa Inggris di sini)</label>
+          <textarea id="customCopy" class="textarea" rows="3" placeholder="Paste the English text you want to imitate…"></textarea>
+        </div>
+
+        <div class="target-box" id="copyTarget" aria-label="Teks target"></div>
+        <div class="recall-note hidden" id="recallNote">🙈 Teks disembunyikan (mode Recall). Baca sekali, lalu ketik dari ingatan. Klik “Cek” untuk memunculkannya kembali.</div>
+
+        <textarea id="copyInput" class="textarea" rows="7" placeholder="Retype the text here…"></textarea>
+
+        <div class="editor-foot">
+          <span class="meta" id="copyAcc">Akurasi: –</span>
+          <span class="meta" id="copyBestNote"></span>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="btnCopyReset" type="button">Reset</button>
+          <button class="btn primary" id="btnCopyCheck">Cek akurasi</button>
+        </div>
+        <div class="result-box hidden" id="copyResult" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- ---------- READING ---------- -->
+    <section class="page hidden" id="page-reading">
+      <div class="card">
+        <h2>Extensive reading</h2>
+        <p class="sub">Menulis yang baik lahir dari membaca yang banyak. Saat membaca, catat pola yang kamu temukan.</p>
+        <div class="pillar">
+          <b>Yang diperhatikan saat membaca</b>
+          ① Topic sentence — bagaimana paragraf dibuka.
+          ② Transisi antar gagasan — <i>however, in contrast, as a result</i>.
+          ③ Kolokasi — kata yang berpasangan alami (<i>make a decision, pose a challenge, take a risk</i>).
+          ④ Ritme — perpaduan kalimat panjang dan pendek.
+        </div>
+        <label class="field-label" for="readSource">Sumber bacaan (URL / judul / halaman)</label>
+        <input type="text" id="readSource" class="input" placeholder="e.g. BBC News — “Why sleep matters”">
+        <label class="field-label" for="readNotes">Catatan struktur &amp; kolokasi</label>
+        <textarea id="readNotes" class="textarea" rows="5" placeholder="e.g. Topic sentence: “Sleep is not a luxury; it is a necessity.” Kolokasi baru: pose a threat, cloud the mind…"></textarea>
+        <div class="editor-foot">
+          <span class="meta">Catatan yang diawali tanda kutip mudah dipakai ulang saat menulis.</span>
+          <div class="spacer"></div>
+          <button class="btn primary" id="btnSaveReading">Simpan catatan</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Catatan sebelumnya</h2>
+          <input type="search" id="rSearch" class="input sm" placeholder="Cari catatan…" aria-label="Cari catatan">
+        </div>
+        <div id="rList" class="stack"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CYCLE ---------- -->
+    <section class="page hidden" id="page-cycle">
+      <div class="card">
+        <h2>Siklus: Draft → Correct → Rewrite</h2>
+        <p class="sub">Metode inti: tulis bebas tanpa menyunting, koreksi (Grammarly / AI / sendiri) sambil <b>memahami</b> tiap perubahan, lalu tulis ulang dari ingatan.</p>
+
+        <div class="step-head"><span class="step-num">1</span> Draft — tulis tanpa mengedit</div>
+        <textarea id="cyDraft" class="textarea" rows="6" placeholder="Write your first draft without stopping…"></textarea>
+
+        <div class="step-head"><span class="step-num">2</span> Corrected — versi yang sudah dikoreksi
+          <button class="btn ghost sm" id="btnCycleToCorrector" type="button" title="Periksa draft di Checker Grammar">⤳ Buka Checker</button>
+        </div>
+        <textarea id="cyFixed" class="textarea" rows="6" placeholder="Paste or write the corrected version…"></textarea>
+
+        <div class="step-head"><span class="step-num">3</span> Rewrite — tulis ulang dari ingatan</div>
+        <textarea id="cyRewrite" class="textarea" rows="6" placeholder="Close your eyes to the corrected version. Retype it from memory…"></textarea>
+
+        <div class="editor-foot">
+          <span class="meta" id="cySimilarity"></span>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="btnCyDiff" type="button">Bandingkan Rewrite vs Corrected</button>
+        </div>
+        <div class="result-box hidden" id="cyDiff" aria-live="polite"></div>
+
+        <div class="divider"></div>
+        <div class="checklist">
+          <label class="check"><input type="checkbox" id="ck1"> Draft ditulis tanpa menyunting di tengah jalan</label>
+          <label class="check"><input type="checkbox" id="ck2"> Sudah dikoreksi dengan alat atau bantuan lain</label>
+          <label class="check"><input type="checkbox" id="ck3"> Setiap perubahan dipahami alasannya</label>
+          <label class="check"><input type="checkbox" id="ck4"> Kesalahan yang terulang dicatat di Error Log</label>
+        </div>
+        <div class="editor-foot">
+          <span class="meta" id="cyStatus"></span>
+          <div class="spacer"></div>
+          <button class="btn primary" id="btnSaveCycle">Selesaikan sesi</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Sesi sebelumnya</h2>
+        <div id="cyList" class="stack"></div>
+      </div>
+    </section>
+
+    <!-- ---------- CORRECTOR ---------- -->
+    <section class="page hidden" id="page-corrector">
+      <div class="card">
+        <h2>Koreksi grammar</h2>
+        <p class="sub">Tempel atau tulis teksmu, lalu periksa. <b>Offline</b>: puluhan aturan kesalahan umum ESL (agreement, article, preposisi, tense, spelling, tanda baca) — jalan tanpa internet. <b>Online</b>: memakai LanguageTool — lebih menyeluruh, perlu internet, teks dikirim ke server publiknya.</p>
+
+        <div class="row wrap gap8">
+          <select id="corrSource" class="input" style="max-width:260px;" aria-label="Sumber teks">
+            <option value="paste">Teks tempel sendiri</option>
+            <option value="cycle">Ambil dari draft Cycle</option>
+            <option value="journal">Ambil entri journal terakhir</option>
+          </select>
+          <button class="btn ghost sm" id="corrLoad" type="button">Muat teks</button>
+          <span class="meta" id="corrNote"></span>
+        </div>
+
+        <label class="field-label" for="corrText">Teks untuk diperiksa</label>
+        <textarea id="corrText" class="textarea" rows="9" placeholder="Paste your English text here, then run a check…"></textarea>
+
+        <div class="editor-foot">
+          <span class="meta" id="corrSummary"></span>
+          <div class="spacer"></div>
+          <button class="btn ghost" id="btnCorrCopy" type="button">Salin teks</button>
+          <button class="btn ghost" id="btnCheckLocal" type="button">Periksa offline</button>
+          <button class="btn primary" id="btnCheckOnline" type="button">Periksa online</button>
+        </div>
+
+        <div class="row end mt8 hidden" id="corrTools">
+          <button class="btn ghost sm" id="btnToCycle" type="button">Kirim ke Cycle langkah 2 →</button>
+          <button class="btn primary sm" id="btnApplyAll" type="button">✓ Terapkan semua perbaikan</button>
+        </div>
+
+        <div id="corrIssues" class="stack mt8"></div>
+      </div>
+    </section>
+
+    <!-- ---------- ERRORS ---------- -->
+    <section class="page hidden" id="page-errors">
+      <div class="card">
+        <h2>Error log</h2>
+        <p class="sub">Kesalahan yang dicatat, dipahami, dan ditulis ulang tidak akan diulang. Ini aset paling berharga dari latihanmu.</p>
+        <div class="row wrap gap8">
+          <select id="errType" class="input" style="max-width:220px;" aria-label="Jenis kesalahan">
+            <option>Spelling</option><option>Tense</option><option>Article (a/an/the)</option>
+            <option>Preposition</option><option>Word Choice</option><option>Word Form</option>
+            <option>Subject–Verb Agreement</option><option>Punctuation</option>
+            <option>Sentence Structure</option><option>Other</option>
+          </select>
+          <input type="text" id="errWrong" class="input" style="flex:1;min-width:180px;" placeholder="Yang salah: e.g. “I am agree”">
+        </div>
+        <input type="text" id="errRight" class="input mt8" placeholder="Versi benar: “I agree”">
+        <div class="editor-foot">
+          <span class="meta">Catat persis bentuk yang salah — otak mengingat kontras pertama yang ia lihat.</span>
+          <div class="spacer"></div>
+          <button class="btn primary" id="btnAddErr">Tambah ke log</button>
+        </div>
+      </div>
+
+      <div class="card" id="errStatsCard">
+        <h2>Polamu sejauh ini</h2>
+        <p class="sub">Jenis kesalahan yang paling sering muncul — fokus perbaiki yang teratas.</p>
+        <div id="errStats" class="bars"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Semua kesalahan</h2>
+          <div class="row gap8">
+            <input type="search" id="errSearch" class="input sm" placeholder="Cari kesalahan…" aria-label="Cari kesalahan">
+            <button class="btn ghost sm" id="btnExportErr" type="button">Export JSON</button>
+          </div>
+        </div>
+        <div id="errList" class="stack"></div>
+      </div>
+    </section>
+
+    <!-- ---------- PLAN ---------- -->
+    <section class="page hidden" id="page-plan">
+      <div class="card">
+        <h2>Rencana latihan mingguan</h2>
+        <p class="sub">Kerangka sederhana yang menggabungkan kelima metode. Sesuaikan jadwalnya — yang penting rutin.</p>
+        <div class="plan-list">
+          <div class="plan-row"><b>Senin</b><span>Journaling 150 kata + baca 1 artikel dengan catatan struktur</span></div>
+          <div class="plan-row"><b>Selasa</b><span>Copywork 1 teks + simpan kolokasi baru ke Reading</span></div>
+          <div class="plan-row"><b>Rabu</b><span>Journaling topik opini + tinjau Error Log lama</span></div>
+          <div class="plan-row"><b>Kamis</b><span>Cycle penuh: Draft → Correct → Rewrite (1 paragraf)</span></div>
+          <div class="plan-row"><b>Jumat</b><span>Journaling + tambahkan kesalahan minggu ini ke Error Log</span></div>
+          <div class="plan-row"><b>Sabtu</b><span>Copywork mode Recall atau Cycle — tinjau streak &amp; catatan</span></div>
+          <div class="plan-row"><b>Minggu</b><span>Rewrite tanpa melihat: ambil draft lama, tulis finalnya</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Kaidah agar progres nyata</h2>
+        <ul class="rules">
+          <li><b>Konsisten &gt; banyak.</b> 15 menit tiap hari mengalahkan 2 jam sekali seminggu.</li>
+          <li><b>Koreksi wajib dipahami.</b> Jangan terima saran koreksi tanpa tahu alasannya.</li>
+          <li><b>Rewrite itu pengikat.</b> Tulis ulang versi benar dari ingatan — di situlah pembelajaran terjadi.</li>
+          <li><b>Error log adalah peta.</b> Minggu demi minggu, jenis kesalahan teratas akan bergeser — itu tanda berkembang.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <section class="page hidden" id="page-settings">
+      <div class="card">
+        <h2>Profil &amp; target</h2>
+        <label class="field-label" for="setName">Nama (dipakai untuk sapaan di dashboard)</label>
+        <input type="text" id="setName" class="input" placeholder="e.g. Micky" maxlength="30">
+        <label class="field-label" for="setGoal">Target kata per entri journaling</label>
+        <input type="number" id="setGoal" class="input" min="20" max="1000" step="10">
+        <label class="field-label">Tema tampilan</label>
+        <div class="seg" id="themeSeg" role="group" aria-label="Tema">
+          <button class="seg-btn" data-t="dark">🌙 Gelap</button>
+          <button class="seg-btn" data-t="light">☀️ Terang</button>
+        </div>
+        <div class="editor-foot"><span></span><div class="spacer"></div><button class="btn primary" id="btnSaveSettings">Simpan pengaturan</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Data</h2>
+        <p class="sub">Semua data tersimpan lokal di browser ini. Ekspor secara berkala sebagai cadangan.</p>
+        <div class="row wrap gap8">
+          <button class="btn ghost" id="btnExportAll">⭳ Export semua data</button>
+          <button class="btn ghost" id="btnImportAll">⭱ Import backup</button>
+          <button class="btn danger" id="btnResetAll"> hapus semua data</button>
+        </div>
+        <input type="file" id="importFile" accept="application/json" class="hidden">
+        <p class="meta mt8">Disclaimer: aplikasi ini murni lokal — tidak ada data yang dikirim ke mana pun.</p>
+      </div>
+
+      <div class="card">
+        <h2>Tentang</h2>
+        <p class="sub">English Writing Trainer v2 — implementasi lima metode latihan writing: journaling rutin, copywork/imitasi, extensive reading, siklus draft–correct–rewrite, dan error log, dengan pelacakan streak untuk menjaga konsistensi.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast" role="status"></div>
+
+<!-- confirm modal -->
+<div class="modal-backdrop hidden" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <h3 id="modalTitle">Konfirmasi</h3>
+    <p class="sub" id="modalMsg"></p>
+    <div class="row end gap8 mt8">
+      <button class="btn ghost" id="modalCancel">Batal</button>
+      <button class="btn danger" id="modalOk">Ya, lanjutkan</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

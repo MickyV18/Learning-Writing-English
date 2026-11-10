@@ -1,0 +1,19 @@
+{
+  "name": "English Writing Trainer",
+  "short_name": "EWT",
+  "description": "Sistem latihan menulis bahasa Inggris: journaling, copywork, extensive reading, draft-correct-rewrite, dan error log.",
+  "lang": "id",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101418",
+  "theme_color": "#101418",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
