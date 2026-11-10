@@ -18,7 +18,7 @@
     } catch (e) { return d; }
   }
   function saveLocal(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
-  function save(k, v) { saveLocal(k, v); cloudSave(k, v); }
+  function save(k, v) { saveLocal(k, v); cloudSave(k, v); kcNoticeSave(k); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function todayISO(d) { d = d || new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
@@ -108,7 +108,7 @@
     corrector: ["Koreksi Grammar", "Periksa & koreksi grammar — aturan offline + LanguageTool online"],
     errors: ["Error Log", "Metode 5 — pelacakan kesalahan agar tidak terulang"],
     plan: ["Rencana", "Jadwal mingguan yang menggabungkan semua metode"],
-    account: ["Akun & Sinkronisasi", "Masuk dengan Google — progress tersimpan di cloud dan mengikuti akunmu"],
+    account: ["Akun & Sinkronisasi", "Kode sinkron (nol setup) atau masuk Google — progress mengikuti perangkat mana pun"],
     settings: ["Pengaturan", "Profil, tema, dan kelola data"]
   };
   function goto(page) {
@@ -1275,8 +1275,276 @@
     renderStreak(); renderDashboard(); renderAccount();
   }
 
+  /* ============================================================
+     sinkron cepat via GitHub (gist privat — tanpa server sendiri)
+     - token PAT scope=gist; data disimpan sebagai gist privat milikmu
+     - file "ewt-progress.json" = seluruh snapshot data utama
+     - push otomatis ±7 detik setelah ada perubahan; pull di hubungkan/awal
+     ============================================================ */
+  var GH_API = "https://api.github.com";
+  var KC_FILE = "ewt-progress.json";
+  var KC_SYNC_KEYS = ["journal", "readings", "cycles", "errors", "acts", "copyBest", "settings", "promptIdx"];
+  var kcReady = false;
+  var kcDirty = false;
+  var kcBusy = false;
+
+  function kcToken() { var t = load("kcToken", ""); return typeof t === "string" ? t.trim() : ""; }
+
+  function kcNoticeSave(k) {
+    if (!kcReady) return;
+    if (KC_SYNC_KEYS.indexOf(k) < 0) return;
+    if (!kcToken()) return;
+    kcDirty = true;
+    kcPushSoon();
+  }
+
+  function kcSnapshot() {
+    var o = { app: "ewt", ts: new Date().toISOString(), data: {} };
+    KC_SYNC_KEYS.forEach(function (k) {
+      var v = load(k, null);
+      if (v !== null && v !== undefined) o.data[k] = v;
+    });
+    return o;
+  }
+
+  function kcApply(snap) {
+    var d = (snap && snap.data) || {};
+    saveLocal("journal", mergeJournal(load("journal", []), d.journal || [], true));
+    if (d.acts) {
+      var la = load("acts", {});
+      Object.keys(d.acts).forEach(function (iso) { if (!la[iso] || !Object.keys(la[iso]).length) la[iso] = d.acts[iso]; });
+      saveLocal("acts", la);
+    }
+    if (d.copyBest) {
+      var lc = load("copyBest", {});
+      Object.keys(d.copyBest).forEach(function (k) { if (lc[k] === undefined || d.copyBest[k] > lc[k]) lc[k] = d.copyBest[k]; });
+      saveLocal("copyBest", lc);
+    }
+    ["readings", "cycles", "errors", "settings", "promptIdx"].forEach(function (k) {
+      if (d[k] !== undefined && d[k] !== null) saveLocal(k, d[k]);
+    });
+  }
+
+  // --- transport API gist ---
+  function ghHeaders(tok) { return { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + tok }; }
+
+  function kcListGists(tok) {
+    return fetch(GH_API + "/gists?per_page=100", { headers: ghHeaders(tok) }).then(function (r) {
+      if (!r.ok) { return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); }); }
+      return r.json();
+    });
+  }
+  function kcFindGist(list) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].files && list[i].files[KC_FILE]) return list[i].id;
+    }
+    return null;
+  }
+  function kcCreateGist(tok) {
+    var files = {};
+    files[KC_FILE] = { content: JSON.stringify({ app: "ewt", ts: "", data: {} }) };
+    return fetch(GH_API + "/gists", {
+      method: "POST", headers: ghHeaders(tok),
+      body: JSON.stringify({ description: "Writing Trainer — data sinkron (dibuat otomatis)", public: false, files: files })
+    }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); });
+      return r.json();
+    }).then(function (g) { saveLocal("kcGistId", g.id); return g.id; });
+  }
+  function kcGetGist(tok, id) {
+    return fetch(GH_API + "/gists/" + id, { headers: ghHeaders(tok) }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); });
+      return r.json();
+    });
+  }
+  // isi kop file gist → string JSON atau null bila belum ada data
+  function kcGistContent(g) {
+    var f = g && g.files && g.files[KC_FILE];
+    if (!f || !f.content || !f.content.trim() || f.content.trim() === "{}") return null;
+    return f.truncated && f.raw_url
+      ? fetch(f.raw_url, { headers: ghHeaders(kcToken()) }).then(function (r) { if (!r.ok) throw new Error("" + r.status); return r.text(); })
+      : Promise.resolve(f.content);
+  }
+  function kcPatchContent(tok, id, content) {
+    var files = {}; files[KC_FILE] = { content: content };
+    return fetch(GH_API + "/gists/" + id, {
+      method: "PATCH", headers: ghHeaders(tok),
+      body: JSON.stringify({ files: files })
+    }).then(function (r) {
+      if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); });
+      return true;
+    });
+  }
+  // pastikan gist ada: sink detail dari cache, cari di daftar, atau buat baru
+  function kcEnsureGist(tok, cb) {
+    var id = load("kcGistId", "");
+    if (id) { cb(id); return; }
+    kcListGists(tok).then(function (l) {
+      var found = kcFindGist(l);
+      if (found) { saveLocal("kcGistId", found); cb(found); return; }
+      return kcCreateGist(tok).then(cb);
+    }).catch(function (e) { throw e; });
+  }
+
+  function kcPush(manual, cb) {
+    var tok = kcToken();
+    if (!tok) { if (manual) toast("Token GitHub belum dihubungkan."); if (cb) cb(false); return; }
+    if (kcBusy) { if (manual) toast("Sinkron sedang berjalan…"); if (cb) cb(false); return; }
+    kcBusy = true;
+    kcEnsureGist(tok).then(function (id) {
+      return kcPatchContent(tok, id, JSON.stringify(kcSnapshot())).catch(function (e) {
+        if (String(e).indexOf("404") === 0) { saveLocal("kcGistId", ""); return kcEnsureGist(tok).then(function (id2) { return kcPatchContent(tok, id2, JSON.stringify(kcSnapshot())); }); }
+        throw e;
+      });
+    }).then(function () {
+      kcBusy = false;
+      kcDirty = false;
+      saveLocal("kcLastPush", new Date().toISOString());
+      renderAccount();
+      if (manual) toast("Data terkirim ke gist ✓");
+      if (cb) cb(true);
+    }).catch(function (e) {
+      kcBusy = false;
+      console.warn("kcPush:", e);
+      if (String(e).indexOf("401") > -1) toast("Token GitHub ditolak (401) — buat token baru lalu hubungkan lagi.");
+      else if (manual) toast("Kirim gagal — " + e);
+      if (cb) cb(false);
+    });
+  }
+  var kcPushSoon = debounce(function () { kcPush(false); }, 7000);
+
+  // pull merge-commit: tarik → gabung → kirim hasil merge ke gist
+  function kcPull(opts) {
+    opts = opts || {};
+    var tok = kcToken();
+    if (!tok) { if (!opts.silent) toast("Token GitHub belum dihubungkan."); return; }
+    if (kcBusy) { if (!opts.silent) toast("Sinkron sedang berjalan…"); return; }
+    kcBusy = true;
+    if (!opts.silent) toast("Mengambil data dari gist…");
+
+    var knownId = load("kcGistId", "");
+    var find = knownId
+      ? kcGetGist(tok, knownId)
+      : kcListGists(tok).then(function (l) {
+        var id = kcFindGist(l);
+        if (!id) { return { gist: null, id: null }; }
+        saveLocal("kcGistId", id);
+        return kcGetGist(tok, id).then(function (g) { return { gist: g, id: id }; });
+      });
+
+    find.then(function (res) {
+      kcBusy = false;
+      if (!res) { // token valid, gist belum ada → data lokal jadi tunggal
+        renderAccount();
+        if (!opts.silent) toast("Gist belum ada — data lokal dikirim ✓");
+        kcPush(false, null);
+        if (opts.onDone) opts.onDone(true);
+        return;
+      }
+      var g = res.gist || res; // dari kcGetGist → langsung objek gist; dari pencarian → {gist, id}
+      kcGistContent(g).then(function (raw) {
+        if (raw === null) {
+          // gist masih kosong
+          kcPush(false, null);
+          renderAccount();
+          if (!opts.silent) toast("Gist masih kosong — data lokal dikirim ✓");
+          if (opts.onDone) opts.onDone(true);
+          return;
+        }
+        var obj = null;
+        try { obj = JSON.parse(raw); } catch (e) { obj = null; }
+        if (!obj || obj.app !== "ewt" || typeof obj.data !== "object") {
+          renderAccount();
+          toast("Isi gist tidak dikenali — bukan data aplikasi ini.");
+          if (opts.onDone) opts.onDone(false);
+          return;
+        }
+        kcApply(obj);
+        afterSync();
+        saveLocal("kcLastPull", new Date().toISOString());
+        kcPush(false, null);           // commit hasil merge ke gist
+        renderAccount();
+        if (!opts.silent) toast("Data terambil dari gist ✓");
+        if (opts.onDone) opts.onDone(true);
+      }).catch(function (e) {
+        kcBusy = false;
+        console.warn("kcPull:", e);
+        if (String(e).indexOf("404") > -1) { saveLocal("kcGistId", ""); toast("Gist tidak ditemukan (404) — akan dibuat ulang saat kirim."); }
+        else if (!opts.silent) toast("Gagal membaca gist — periksa internet.");
+      });
+    }).catch(function (e) {
+      kcBusy = false;
+      console.warn("kcPull:", e);
+      var msg = String(e);
+      if (msg.indexOf("404") > -1) {
+        saveLocal("kcGistId", "");
+        if (!opts.silent) toast("Gist tidak ada lagi (404) — dibuat ulang saat kirim.");
+        window.setTimeout(function () { kcPush(false, null); }, 0);   // buat ulang gist dengan data lokal
+      }
+      else if (msg.indexOf("401") > -1) toast("Token GitHub ditolak (401) — buat token baru lalu hubungkan lagi.");
+      else if (!opts.silent) toast("Tarik gagal — " + e);
+      else toast("Tarik tertunda — periksa internet.");
+    });
+  }
+
+  function kcConnect(raw) {
+    var tok = (raw || "").trim();
+    if (!tok) { toast("Tempel token dulu — klik „Buat token” untuk membuatnya."); return; }
+    toast("Memeriksa token…");
+    kcListGists(tok).then(function (l) {
+      saveLocal("kcToken", tok);
+      var id = kcFindGist(l);
+      if (id) { saveLocal("kcGistId", id); }
+      renderAccount();
+      if (id) { kcPull({ silent: false }); }
+      else {
+        kcPush(true, function (ok) { if (ok) toast("Terhubung ✓ — gist privat dibuat otomatis"); });
+      }
+    }).catch(function (e) {
+      console.warn("kcConnect:", e);
+      toast("Token ditolak GitHub — pastikan disalin lengkap & scope gist aktif.");
+    });
+    $("#kcInput").value = "";
+  }
+
+  /* --- UI halaman akun bagian sinkron cepat --- */
+  $("#btnKcConnect").addEventListener("click", function () { kcConnect($("#kcInput").value); });
+  $("#kcInput").addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); $("#btnKcConnect").click(); } });
+  $("#btnKcCopy").addEventListener("click", function () { copyText(load("kcGistId", ""), function () { toast("ID gist disalin"); }); });
+  $("#btnKcPush").addEventListener("click", function () { kcPush(true); });
+  $("#btnKcPull").addEventListener("click", function () { kcPull({ silent: false }); });
+  $("#btnKcDisconnect").addEventListener("click", function () {
+    confirmBox("Putuskan sinkron gist?", "Data di gist tidak dihapus — salinan lokal di perangkat ini juga dipertahankan. Hubungkan lagi kapan saja.", function () {
+      saveLocal("kcToken", "");
+      saveLocal("kcGistId", "");
+      kcDirty = false;
+      renderAccount();
+      toast("Terputus — data lokal dipertahankan");
+    });
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden && kcReady && kcDirty && kcToken()) kcPush(false, null);
+  });
+  // aktif setelah semua definisi — save() yang jalan sebelum titik ini (migration,
+  // init awal) sengaja tidak tersinkron agar cloud tidak di-spam saat startup
+  kcReady = true;
+
   /* ---------------- UI halaman akun ---------------- */
   function renderAccount() {
+    // --- kode sinkron (nol setup) ---
+    var tok = kcToken();
+    $("#kcOff").classList.toggle("hidden", !!tok);
+    $("#kcOn").classList.toggle("hidden", !tok);
+    if (tok) {
+      var gid = load("kcGistId", "");
+      $("#kcCodeLabel").textContent = gid ? "gist privat • " + gid.slice(0, 8) + "…" : "GitHub berjalan (gist dibuat saat kirim pertama)";
+      var lp = load("kcLastPush", null);
+      var optOff = navigator.onLine === false ? " • offline — perubahan menyusul" : "";
+      $("#kcStatus").textContent =
+        "Sinkron otomatis aktif — perubahan terkirim ±7 detik setelah tersimpan." +
+        (lp ? " Terakhir kirim: " + new Date(lp).toLocaleTimeString("id-ID") : "") + optOff;
+    }
+    // --- Google/Firebase (opsional) ---
     $("#accNoConfig").classList.toggle("hidden", cloudConfigured);
     if (!cloudConfigured) return;
     var signed = !!fbUser;
@@ -1419,5 +1687,6 @@
   document.documentElement.dataset.theme = settings.theme || "dark";
   renderStreak(); renderDashboard();
   initCloud(); renderAccount();
+  if (kcToken()) setTimeout(function () { kcPull({ silent: true }); }, 800);   // tarik cloud saat app dibuka
   goto("dashboard");
 })();

@@ -384,6 +384,37 @@
 
     <!-- ---------- ACCOUNT ---------- -->
     <section class="page hidden" id="page-account">
+      <div class="card">
+        <h2>Sinkron cepat via GitHub — tanpa setup rumit</h2>
+        <p class="sub">Cara termudah menyimpan progress ke cloud &amp; melihatnya di HP: hubungkan token GitHub-mu (2 langkah), dan semua perangkat yang memakai token yang sama akan sinkron otomatis. Data disimpan sebagai <b>gist privat</b> milikmu sendiri di GitHub — bukan pihak ketiga.</p>
+
+        <div id="kcOff">
+          <ol class="setup-steps">
+            <li>Klik <a class="link-like" href="https://github.com/settings/tokens/new?description=Writing%20Trainer%20sync&amp;scopes=gist" target="_blank" rel="noopener">Buat token di GitHub ↗</a> — lalu klik <b>Generate token</b> di halaman itu (scope <code>gist</code> sudah otomatis).</li>
+            <li>Salin token (<code>ghp_…</code>) → tempel di bawah → <b>Hubungkan</b>. Selesai.</li>
+          </ol>
+          <div class="row wrap gap8 mt8">
+            <input type="password" id="kcInput" class="input sm" placeholder="tempel token, mis. ghp_xxxxxxxxxxxx" style="max-width:330px;">
+            <button class="btn primary sm" id="btnKcConnect" type="button">Hubungkan</button>
+          </div>
+          <p class="meta mt8">Token tersimpan hanya di browser masing-masing perangkat (tempel lagi di HP nanti). Aman: gist bisa hanya dilihat/ambil/buat dengan GitHub milikmu, dan gist yang dibuat bersifat privat.</p>
+        </div>
+
+        <div id="kcOn" class="hidden">
+          <div class="row wrap gap8" style="align-items:center;">
+            <span class="tag" id="kcCodeLabel"></span>
+            <button class="btn ghost sm" id="btnKcCopy" type="button">Salin ID gist</button>
+          </div>
+          <p class="meta mt8" id="kcStatus"></p>
+          <div class="row gap8 mt8">
+            <button class="btn ghost sm" id="btnKcPush" type="button">⭱ Kirim sekarang</button>
+            <button class="btn ghost sm" id="btnKcPull" type="button">⭳ Tarik sekarang</button>
+            <button class="btn danger sm" id="btnKcDisconnect" type="button">Putuskan</button>
+          </div>
+        </div>
+        <p class="meta mt8">Yang ikut tersinkron: journal, cycle, error log, reading, streak, dan pengaturan. Draf editan journal/cycle tetap lokal per perangkat.</p>
+      </div>
+
       <div class="card" id="accNoConfig">
         <h2>Firebase belum dikonfigurasi</h2>
         <p class="sub">Sinkronisasi cloud butuh project Google Firebase (gratis). Ikuti langkah ini:</p>

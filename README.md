@@ -49,7 +49,21 @@ English-Writing-Trainer/
 - Backup: **Pengaturan → Export semua data**; restore: **Import backup**.
 - Draft journal/cycle/koreksi tetap tersimpan lokal per perangkat (tidak disinkron).
 
-## Akun & sinkronisasi cloud (opsional, Firebase)
+## Data — simpan & lihat di HP
+Tiga cara, dari termudah:
+
+### 1. Sinkron via GitHub Gist (2 langkah — direkomendasikan)
+Halaman **Akun** → klik **Buat token di GitHub ↗** → di GitHub klik **Generate token** (scope `gist` sudah otomatis) → salin token (`ghp_…`) → tempel di aplikasi → **Hubungkan**. Gist privat dibuat otomatis, lalu dari HP: buka aplikasi → **Akun** → tempel token yang sama → **Hubungkan** → data terambil. Semua perubahan tersinkron otomatis dua arah setelahnya.
+
+- Backend: gist privat di akun GitHub-mu sendiri — permanen, tanpa batas kuota berarti (API GitHub 5.000 req/jam untuk token authenticated).
+- Token tersimpan hanya di localStorage tiap perangkat. Gist bisa dihapus kapan saja di gist.github.com (data lokal tiap perangkat tetap ada sebagai cadangan).
+- Tarik otomatis saat aplikasi dibuka; kirim otomatis ±7 detik setelah perubahan tersimpan dan saat aplikasi ditutup/dipindah tab.
+- Draft journal/cycle tidak ikut tersinkron (per perangkat).
+
+### 2. Export/Import manual (nol internet)
+**Pengaturan → Export semua data** → kirim file JSON ke HP (WhatsApp/Drive) → **Import backup** di sana. Paling aman untuk cadangan.
+
+### 3. Login Google + Firestore (opsional, setup lebih panjang)
 Fitur login Google + sinkron cloud memakai Firebase (Google) dengan quota gratis (Spark) yang lebih dari cukup untuk penggunaan pribadi. **Data tersinkron hanya ke project Firebase-mu sendiri** — tidak ada pihak ketiga.
 
 ### Siapkan Firebase (±10 menit)
