@@ -1552,8 +1552,29 @@
   // --- transport API gist ---
   function ghHeaders(tok) { return { "Accept": "application/vnd.github+json", "Authorization": "Bearer " + tok }; }
 
+  // fetch dengan batas waktu — tanpa ini, jaringan macet bikin status sinkron terkunci
+  var KCFETCH_MS = 20000, kcBusyAt = 0;
+  function ghFetch(url, opts) {
+    opts = opts || {};
+    var msg = "";
+    if (typeof AbortController === "undefined") return fetch(url, opts);
+    var ctrl = new AbortController();
+    opts.signal = ctrl.signal;
+    var timer = window.setTimeout(function () { ctrl.abort(); }, KCFETCH_MS);
+    return fetch(url, opts).then(function (r) { window.clearTimeout(timer); return r; }, function (e) {
+      window.clearTimeout(timer);
+      msg = (e && e.name === "AbortError" || !navigator.onLine) ? "batas waktu/hilang koneksi" : (e && e.message) || "jaringan";
+      throw new Error(msg);
+    });
+  }
+  // watchdog: lepas kunci macet bila opsi berjalan >45 detik
+  function kcUnstick() {
+    if (kcBusy && Date.now() - kcBusyAt > 45000) { kcBusy = false; return true; }
+    return false;
+  }
+
   function kcListGists(tok) {
-    return fetch(GH_API + "/gists?per_page=100", { headers: ghHeaders(tok) }).then(function (r) {
+    return ghFetch(GH_API + "/gists?per_page=100", { headers: ghHeaders(tok) }).then(function (r) {
       if (!r.ok) { return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); }); }
       return r.json();
     });
@@ -1567,7 +1588,7 @@
   function kcCreateGist(tok) {
     var files = {};
     files[KC_FILE] = { content: JSON.stringify({ app: "ewt", ts: "", data: {} }) };
-    return fetch(GH_API + "/gists", {
+    return ghFetch(GH_API + "/gists", {
       method: "POST", headers: ghHeaders(tok),
       body: JSON.stringify({ description: "Writing Trainer — data sinkron (dibuat otomatis)", public: false, files: files })
     }).then(function (r) {
@@ -1576,7 +1597,7 @@
     }).then(function (g) { saveLocal("kcGistId", g.id); return g.id; });
   }
   function kcGetGist(tok, id) {
-    return fetch(GH_API + "/gists/" + id, { headers: ghHeaders(tok) }).then(function (r) {
+    return ghFetch(GH_API + "/gists/" + id, { headers: ghHeaders(tok) }).then(function (r) {
       if (!r.ok) return r.json().catch(function () { return {}; }).then(function (j) { throw new Error(r.status + " " + (j.message || "")); });
       return r.json();
     });
@@ -1586,12 +1607,12 @@
     var f = g && g.files && g.files[KC_FILE];
     if (!f || !f.content || !f.content.trim() || f.content.trim() === "{}") return null;
     return f.truncated && f.raw_url
-      ? fetch(f.raw_url, { headers: ghHeaders(kcToken()) }).then(function (r) { if (!r.ok) throw new Error("" + r.status); return r.text(); })
+      ? ghFetch(f.raw_url, { headers: ghHeaders(kcToken()) }).then(function (r) { if (!r.ok) throw new Error("" + r.status); return r.text(); })
       : Promise.resolve(f.content);
   }
   function kcPatchContent(tok, id, content) {
     var files = {}; files[KC_FILE] = { content: content };
-    return fetch(GH_API + "/gists/" + id, {
+    return ghFetch(GH_API + "/gists/" + id, {
       method: "PATCH", headers: ghHeaders(tok),
       body: JSON.stringify({ files: files })
     }).then(function (r) {
@@ -1613,8 +1634,11 @@
   function kcPush(manual, cb) {
     var tok = kcToken();
     if (!tok) { if (manual) toast("Token GitHub belum dihubungkan."); if (cb) cb(false); return; }
+    if (kcUnstick()) toast("Sinkron yang macet dilepaskan — dicoba lagi.");
     if (kcBusy) { if (manual) toast("Sinkron sedang berjalan…"); if (cb) cb(false); return; }
-    kcBusy = true;
+    kcBusy = true; kcBusyAt = Date.now();
+    var kp = $("#kcStatus");
+    if (kp) kp.textContent = "Mengirim ke gist…";
     kcEnsureGist(tok).then(function (id) {
       return kcPatchContent(tok, id, JSON.stringify(kcSnapshot())).catch(function (e) {
         if (String(e).indexOf("404") === 0) { saveLocal("kcGistId", ""); return kcEnsureGist(tok).then(function (id2) { return kcPatchContent(tok, id2, JSON.stringify(kcSnapshot())); }); }
@@ -1631,7 +1655,9 @@
       kcBusy = false;
       console.warn("kcPush:", e);
       if (String(e).indexOf("401") > -1) toast("Token GitHub ditolak (401) — buat token baru lalu hubungkan lagi.");
+      else if (String(e).indexOf("403") > -1) toast("Gist ditolak (403) — jalankan tautan token dengan sidang gist sudah aktif.");
       else if (manual) toast("Kirim gagal — " + e);
+      renderAccount();
       if (cb) cb(false);
     });
   }
@@ -1642,9 +1668,12 @@
     opts = opts || {};
     var tok = kcToken();
     if (!tok) { if (!opts.silent) toast("Token GitHub belum dihubungkan."); return; }
+    if (kcUnstick()) toast("Sinkron yang macet dilepaskan — dicoba lagi.");
     if (kcBusy) { if (!opts.silent) toast("Sinkron sedang berjalan…"); return; }
-    kcBusy = true;
+    kcBusy = true; kcBusyAt = Date.now();
     if (!opts.silent) toast("Mengambil data dari gist…");
+    var kp = $("#kcStatus");
+    if (kp) kp.textContent = "Mengambil dari gist…";
 
     var knownId = load("kcGistId", "");
     var find = knownId
@@ -1693,12 +1722,14 @@
       }).catch(function (e) {
         kcBusy = false;
         console.warn("kcPull:", e);
+        renderAccount();
         if (String(e).indexOf("404") > -1) { saveLocal("kcGistId", ""); toast("Gist tidak ditemukan (404) — akan dibuat ulang saat kirim."); }
-        else if (!opts.silent) toast("Gagal membaca gist — periksa internet.");
+        else if (!opts.silent) toast("Gagal membaca gist — " + e);
       });
     }).catch(function (e) {
       kcBusy = false;
       console.warn("kcPull:", e);
+      renderAccount();
       var msg = String(e);
       if (msg.indexOf("404") > -1) {
         saveLocal("kcGistId", "");
@@ -1749,6 +1780,8 @@
   document.addEventListener("visibilitychange", function () {
     if (document.hidden && kcReady && kcDirty && kcToken()) kcPush(false, null);
   });
+  // pembersih otomatis: kalau ada opsi yang macet (mis. jaringan mati di tengah fetch)
+  window.setInterval(function () { if (kcUnstick() && !document.hidden) renderAccount(); }, 20000);
   // aktif setelah semua definisi — save() yang jalan sebelum titik ini (migration,
   // init awal) sengaja tidak tersinkron agar cloud tidak di-spam saat startup
   kcReady = true;
