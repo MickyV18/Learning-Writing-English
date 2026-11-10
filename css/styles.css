@@ -329,3 +329,8 @@ textarea{ min-height:110px; }
 @media print{
   .sidebar, .editor-foot .btn, .toast, .modal-backdrop{ display:none !important; }
 }
+
+/* ---------- account ---------- */
+.avatar{ width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid var(--border); background:var(--surface-2); }
+.setup-steps{ padding-left:18px; font-size:13.5px; display:flex; flex-direction:column; gap:8px; }
+.setup-steps code{ background:var(--surface-2); border:1px solid var(--border); border-radius:6px; padding:1px 6px; font-size:12px; }

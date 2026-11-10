@@ -49,6 +49,9 @@
       <button class="nav-item" data-page="plan">
         <span class="nav-ico">▦</span> Rencana
       </button>
+      <button class="nav-item" data-page="account">
+        <span class="nav-ico">👤</span> Akun
+      </button>
       <button class="nav-item" data-page="settings">
         <span class="nav-ico">⚙</span> Pengaturan
       </button>
@@ -138,6 +141,18 @@
         </div>
         <textarea id="jText" class="textarea" rows="9"
           placeholder="Write your entry in English here..."></textarea>
+
+        <div class="row gap8 mt8">
+          <button class="btn ghost sm" id="btnJCheckLocal" type="button">Periksa offline</button>
+          <button class="btn ghost sm" id="btnJCheckOnline" type="button"
+            title="Perlu internet — teks dikirim ke server publik LanguageTool">Periksa online</button>
+          <span class="meta" id="jCheckSummary"></span>
+        </div>
+        <div id="jIssues" class="stack mt8"></div>
+        <div class="row end hidden" id="jTools">
+          <button class="btn primary sm" id="btnJApplyAll" type="button">✓ Terapkan semua perbaikan</button>
+        </div>
+
         <div class="editor-foot">
           <span class="meta" id="jCount">0 kata</span>
           <span class="meta" id="jDraftFlag" aria-live="polite"></span>
@@ -367,6 +382,44 @@
       </div>
     </section>
 
+    <!-- ---------- ACCOUNT ---------- -->
+    <section class="page hidden" id="page-account">
+      <div class="card" id="accNoConfig">
+        <h2>Firebase belum dikonfigurasi</h2>
+        <p class="sub">Sinkronisasi cloud butuh project Google Firebase (gratis). Ikuti langkah ini:</p>
+        <ol class="setup-steps">
+          <li>Buka <b>console.firebase.google.com</b> → buat project (nama bebas).</li>
+          <li>Menu <b>Build → Authentication → Get started</b>, aktifkan penyedia <b>Google</b>.</li>
+          <li>Tab <b>Settings → Authorized domains</b> → tambahkan domain tempat app ini di-hosting (mis. <code>username.github.io</code>). <code>localhost</code> sudah otomatis.</li>
+          <li>Menu <b>Build → Firestore Database → Create database</b> (mode production). Tempel Security Rules dari README.md.</li>
+          <li><b>Project settings → General → Your apps → Web app</b> → daftarkan app → salin config ke file <code>js/firebase-config.js</code>.</li>
+        </ol>
+        <p class="meta mt8">Setelah file config diisi, muat ulang halaman ini.</p>
+      </div>
+
+      <div class="card hidden" id="accSignedOut">
+        <h2>Masuk</h2>
+        <p class="sub">Progress saat ini tersimpan hanya di browser ini. Masuk dengan Google untuk menyimpannya ke cloud dan menariknya kembali di perangkat mana pun.</p>
+        <button class="btn primary" id="btnGoogleLogin" type="button">Masuk dengan Google</button>
+        <p class="meta mt8">Catatan: draft (draf journal/cycle/koreksi) tetap tersimpan lokal per perangkat. Data utama — journal, cycle, error log, reading, streak, pengaturan — tersinkron.</p>
+      </div>
+
+      <div class="card hidden" id="accSignedIn">
+        <div class="row gap8 wrap" style="align-items:center;">
+          <img id="accPhoto" alt="" class="avatar">
+          <div>
+            <div><b id="accName"></b></div>
+            <span class="meta" id="accEmail"></span>
+          </div>
+        </div>
+        <p class="meta mt8" id="accSync">–</p>
+        <div class="row gap8 mt8">
+          <button class="btn ghost" id="btnSyncNow" type="button">↻ Sinkron sekarang</button>
+          <button class="btn danger" id="btnLogout" type="button">Keluar</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ---------- SETTINGS ---------- -->
     <section class="page hidden" id="page-settings">
       <div class="card">
@@ -392,7 +445,7 @@
           <button class="btn danger" id="btnResetAll"> hapus semua data</button>
         </div>
         <input type="file" id="importFile" accept="application/json" class="hidden">
-        <p class="meta mt8">Disclaimer: aplikasi ini murni lokal — tidak ada data yang dikirim ke mana pun.</p>
+        <p class="meta mt8">Disclaimer: tanpa login Akun, semua data murni lokal di browser ini — tidak dikirim ke mana pun. Jika kamu masuk via Akun Google, data utama tersinkron ke project Firebase-mu sendiri.</p>
       </div>
 
       <div class="card">
@@ -419,6 +472,10 @@
   </div>
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+<script src="js/firebase-config.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

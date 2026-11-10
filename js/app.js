@@ -17,7 +17,8 @@
       return v === null ? d : JSON.parse(v);
     } catch (e) { return d; }
   }
-  function save(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
+  function saveLocal(k, v) { localStorage.setItem(LS + k, JSON.stringify(v)); }
+  function save(k, v) { saveLocal(k, v); cloudSave(k, v); }
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
   function todayISO(d) { d = d || new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
@@ -107,6 +108,7 @@
     corrector: ["Koreksi Grammar", "Periksa & koreksi grammar — aturan offline + LanguageTool online"],
     errors: ["Error Log", "Metode 5 — pelacakan kesalahan agar tidak terulang"],
     plan: ["Rencana", "Jadwal mingguan yang menggabungkan semua metode"],
+    account: ["Akun & Sinkronisasi", "Masuk dengan Google — progress tersimpan di cloud dan mengikuti akunmu"],
     settings: ["Pengaturan", "Profil, tema, dan kelola data"]
   };
   function goto(page) {
@@ -117,6 +119,7 @@
     });
     $("#pageTitle").textContent = PAGES[page][0];
     $("#pageSub").textContent = PAGES[page][1];
+    if (page === "account") renderAccount();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
   $$(".nav-item").forEach(function (b) { b.addEventListener("click", function () { goto(b.dataset.page); }); });
@@ -246,7 +249,7 @@
     bar.style.width = Math.min(100, n / goal * 100) + "%";
     bar.style.background = n >= goal ? "var(--green)" : "var(--accent)";
   }
-  jText.addEventListener("input", function () { jCount(); jAutosave(); });
+  jText.addEventListener("input", function () { jCount(); jAutosave(); jMarkStale(); });
   jText.value = load("draftJournal", "");
   jCount(); jRenderDraftFlag();
 
@@ -257,7 +260,7 @@
     list.unshift({ id: uid(), date: todayISO(), topic: PROMPTS[promptIdx][0], prompt: PROMPTS[promptIdx][1], words: countWords(txt), text: txt });
     save("journal", list);
     jText.value = ""; save("draftJournal", "");
-    jCount(); jRenderDraftFlag();
+    jCount(); jRenderDraftFlag(); jClearIssues();
     markDay("journal"); renderJournalList();
     toast("Entri tersimpan — " + countWords(txt) + " kata 🎉");
   });
@@ -297,6 +300,122 @@
     if (head) head.parentElement.classList.toggle("open");
   });
   renderJournalList();
+
+  /* ---------------- journal grammar check ---------------- */
+  var jIssues = [];   // {start,end,wrong,fix,msg,src,stale} — bentuk sama dengan corrector
+  var jLastWasLT = false;
+  var jChecked = false;
+
+  function jMarkStale() {
+    // teks berubah → offset hasil cek lama tidak valid lagi
+    if (!jIssues.length) return;
+    jIssues.forEach(function (iss) { iss.stale = true; });
+    renderJIssues();
+  }
+
+  function renderJIssues() {
+    var el = $("#jIssues");
+    var text = jText.value;
+    var nLocal = jIssues.filter(function (i) { return i.src === "local"; }).length;
+    var nLT = jIssues.length - nLocal;
+    $("#jCheckSummary").textContent = jIssues.length
+      ? jIssues.length + " saran" + (nLocal ? " — " + nLocal + " offline" : "") + (nLT ? " — " + nLT + " online" : "")
+      : "";
+    $("#jTools").classList.toggle("hidden", !jIssues.length);
+
+    el.innerHTML = "";
+    if (!jIssues.length) {
+      if (text.trim() && jChecked) {
+        el.innerHTML = '<div class="ok-note">Tidak ada masalah ditemukan' + (jLastWasLT ? "" : " oleh aturan offline") + ' — tulismu bagus! 🎉</div>';
+      }
+      return;
+    }
+    jIssues.forEach(function (iss, idx) {
+      var fs = Math.max(0, iss.start - 40), fe = Math.min(text.length, iss.end + 40);
+      var ctx = esc(text.slice(fs, iss.start)) + '<span class="hl">' + esc(text.slice(iss.start, iss.end) || "…") + "</span>" + esc(text.slice(iss.end, fe));
+      var li = document.createElement("div");
+      li.className = "issue" + (iss.stale ? " stale" : "");
+      li.innerHTML =
+        '<div class="issue-main" style="flex:1;">' +
+        '<span class="tag src' + (iss.src === "lt" ? " lt" : "") + '">' + (iss.src === "lt" ? "LanguageTool" : "Offline") + "</span>" +
+        (iss.fix ? "<s style='color:var(--red)'>" + esc(iss.wrong) + "</s>" : "") +
+        (iss.fix ? " → <b class='w-ok'>" + esc(iss.fix) + "</b> " : " ") +
+        "<span class='meta'>" + esc(iss.msg) + "</span>" +
+        "</div>" +
+        "<div class='issue-ctx'>" + ctx + "</div>" +
+        (iss.fix ? '<button class="btn sm primary issue-apply" data-i="' + idx + '"' + (iss.stale ? " disabled" : "") + ">Terapkan</button>" : "");
+      el.appendChild(li);
+    });
+  }
+
+  function jRunLocalCheck() {
+    jLastWasLT = false;
+    jChecked = true;
+    jIssues = collectLocalIssues(jText.value);
+    renderJIssues();
+  }
+
+  function jRunLTCheck() {
+    var raw = jText.value;
+    if (!raw.trim()) { toast("Tulis journal dulu 🙂"); return; }
+    var btn = $("#btnJCheckOnline");
+    btn.disabled = true; btn.textContent = "Memeriksa…";
+    $("#jCheckSummary").textContent = "Menghubungi LanguageTool…";
+    fetchLTIssues(raw).then(function (issues) {
+      jChecked = true;
+      jIssues = issues;
+      jLastWasLT = true;
+      renderJIssues();
+      btn.disabled = false; btn.textContent = "Periksa online";
+      if (!jIssues.length) toast("LanguageTool tidak menemukan masalah 🎉");
+    }).catch(function () {
+      btn.disabled = false; btn.textContent = "Periksa online";
+      $("#jCheckSummary").textContent = "";
+      toast("Gagal menghubungi LanguageTool — periksa koneksi internet.");
+    });
+  }
+
+  function jClearIssues() {
+    jIssues = []; jLastWasLT = false; jChecked = false;
+    $("#jCheckSummary").textContent = "";
+    $("#jTools").classList.add("hidden");
+    $("#jIssues").innerHTML = "";
+  }
+
+  function jRecheckLocal() {
+    jIssues = collectLocalIssues(jText.value);
+    renderJIssues();
+  }
+
+  $("#btnJCheckLocal").addEventListener("click", jRunLocalCheck);
+  $("#btnJCheckOnline").addEventListener("click", jRunLTCheck);
+
+  $("#btnJApplyAll").addEventListener("click", function () {
+    var res = applyAllLocalIssues(jText.value);
+    jText.value = res.text;
+    save("draftJournal", jText.value);
+    jCount(); jRenderDraftFlag();
+    jRecheckLocal();
+    toast(res.count + " perbaikan diterapkan ✅");
+  });
+
+  $("#jIssues").addEventListener("click", function (e) {
+    var b = e.target.closest(".issue-apply");
+    if (!b || b.disabled) return;
+    var iss = jIssues[+b.dataset.i];
+    if (!iss) return;
+    jText.value = spliceIssue(jText.value, iss);
+    save("draftJournal", jText.value);
+    jCount(); jRenderDraftFlag();
+    if (iss.src === "local") {
+      jRecheckLocal();
+      toast("Saran diterapkan — hasil diperiksa ulang");
+    } else {
+      jIssues.forEach(function (x) { if (x !== iss) x.stale = true; });
+      renderJIssues();
+      toast("Diterapkan. Jalankan periksa ulang untuk saran lainnya.");
+    }
+  });
 
   /* ---------------- copywork ---------------- */
   var TEXTS = [
@@ -768,27 +887,16 @@
     return text.slice(0, iss.start) + iss.fix + text.slice(iss.end);
   }
 
-  function runLocalCheck() {
-    var text = corrText.value;
-    corrLastWasLT = false;
-    corrIssues = collectLocalIssues(text);
-    renderCorrIssues(text);
-  }
-
-  function runLTCheck() {
-    var raw = corrText.value;
+  // cek online LanguageTool, dipakai fitur corrector & journal — kembalikan daftar issue
+  function fetchLTIssues(raw) {
     var text = raw.trim();
-    if (!text) { toast("Tulis teks dulu."); return; }
-    var btn = $("#btnCheckOnline");
-    btn.disabled = true; btn.textContent = "Memeriksa…";
-    $("#corrSummary").textContent = "Menghubungi LanguageTool…";
-    fetch("https://api.languagetool.org/v2/check", {
+    var base = raw.indexOf(text); // jaga offset bila ada leading whitespace
+    return fetch("https://api.languagetool.org/v2/check", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ text: text, language: "en-US" }).toString()
     }).then(function (r) { return r.json(); }).then(function (data) {
-      var base = raw.indexOf(text); // jaga offset bila ada leading whitespace
-      corrIssues = (data.matches || []).map(function (x) {
+      return (data.matches || []).map(function (x) {
         return {
           start: x.offset + base,
           end: x.offset + x.length + base,
@@ -798,6 +906,24 @@
           src: "lt", stale: false
         };
       });
+    });
+  }
+
+  function runLocalCheck() {
+    var text = corrText.value;
+    corrLastWasLT = false;
+    corrIssues = collectLocalIssues(text);
+    renderCorrIssues(text);
+  }
+
+  function runLTCheck() {
+    var raw = corrText.value;
+    if (!raw.trim()) { toast("Tulis teks dulu."); return; }
+    var btn = $("#btnCheckOnline");
+    btn.disabled = true; btn.textContent = "Memeriksa…";
+    $("#corrSummary").textContent = "Menghubungi LanguageTool…";
+    fetchLTIssues(raw).then(function (issues) {
+      corrIssues = issues;
       corrLastWasLT = true;
       renderCorrIssues(raw);
       btn.disabled = false; btn.textContent = "Periksa online";
@@ -856,9 +982,10 @@
     else { corrIssues.forEach(function (x) { if (x !== iss) x.stale = true; }); renderCorrIssues(corrText.value); toast("Diterapkan. Jalankan periksa ulang untuk saran lainnya."); }
   });
 
-  $("#btnApplyAll").addEventListener("click", function () {
-    var text = corrText.value, total = 0;
-    for (var round = 0; round < 5; round++) {           // cascade: terapkan ulang sampai bersih
+  // terapkan semua perbaikan lokal secara berantai (cascade) sampai bersih
+  function applyAllLocalIssues(text) {
+    var total = 0, round;
+    for (round = 0; round < 5; round++) {
       var iss = collectLocalIssues(text);
       var valid = iss.filter(function (x) { return x.fix; }).sort(function (a, b) { return b.start - a.start; });
       if (!valid.length) break;
@@ -872,10 +999,15 @@
       if (!n) break;
       total += n;
     }
-    corrText.value = text;
+    return { text: text, count: total };
+  }
+
+  $("#btnApplyAll").addEventListener("click", function () {
+    var res = applyAllLocalIssues(corrText.value);
+    corrText.value = res.text;
     saveCorrDraft();
     runLocalCheck();
-    toast(total + " perbaikan diterapkan ✅");
+    toast(res.count + " perbaikan diterapkan ✅");
   });
 
   function copyText(t, ok) {
@@ -935,7 +1067,291 @@
     goto("corrector");
   });
 
-  /* ---------------- settings ---------------- */
+  /* ============================================================
+     akun & sinkronisasi cloud (Firebase Auth + Firestore)
+     Layout Firestore:
+       users/{uid}                     → doc meta (field "meta.{key}")
+       users/{uid}/lists/{key}         → readings | cycles | errors ({ data:[...] })
+       users/{uid}/journal/{entryId}   → 1 doc per entri journal
+     Draft (draftJournal/draftCycle/draftCorr) tetap lokal per perangkat.
+     Data ditulis melalui save() → cache localStorage + write-through cloud.
+     ============================================================ */
+  var META_KEYS = ["settings", "acts", "copyBest", "promptIdx"];
+  var LIST_KEYS = ["readings", "cycles", "errors"];
+
+  var cloudConfigured = typeof firebase !== "undefined" && typeof FIREBASE_CONFIG !== "undefined" && !!FIREBASE_CONFIG.apiKey;
+  var cloudReady = false;      // true setelah init — baru save() boleh menyentuh cloud
+  var syncing = false;         // pull/push besar berjalan — write-through dipause
+  var fbUser = null;
+  var auth = null, db = null;
+  var cloudJournalIdx = {};    // id → JSON entri, kondisi cloud terakhir yang diketahui
+
+  function markDirty(k) { var d = load("syncDirty", {}); d[k] = 1; saveLocal("syncDirty", d); }
+  function clearDirty(k) { var d = load("syncDirty", {}); delete d[k]; saveLocal("syncDirty", d); }
+  function clearAllDirty() { saveLocal("syncDirty", {}); }
+  function dirtyKeys() { return Object.keys(load("syncDirty", {})).filter(function (k) { return META_KEYS.indexOf(k) > -1 || LIST_KEYS.indexOf(k) > -1 || k === "journal"; }); }
+
+  // write-through: dipanggil dari save() untuk setiap perubahan data
+  function cloudSave(k, v) {
+    if (!cloudReady || syncing) return;
+    if (k !== "journal" && META_KEYS.indexOf(k) < 0 && LIST_KEYS.indexOf(k) < 0) return;
+    if (!fbUser) { markDirty(k); return; }   // belum login / logout → antri
+    pushKeys([k]).then(function () { renderAccount(); })
+      .catch(function () { markDirty(k); renderAccount(); });
+  }
+
+  function dotObj(k, v) { var o = {}; o["meta." + k] = v; return o; }
+  function indexById(list) { var m = {}; list.forEach(function (e) { if (e && e.id) m[e.id] = e; }); return m; }
+
+  // siapkan satu batch tulis untuk daftar kunci
+  function buildPushBatch(keys) {
+    var ur = db.collection("users").doc(fbUser.uid);
+    var lists = ur.collection("lists");
+    var batch = db.batch();
+    keys.forEach(function (k) {
+      var v = load(k, null);
+      if (v === null || v === undefined) { clearDirty(k); return; }
+      if (k === "journal") { pushJournalToBatch(batch, ur, v); clearDirty(k); }
+      else if (LIST_KEYS.indexOf(k) > -1) { batch.set(lists.doc(k), { data: v }); clearDirty(k); }
+      else { batch.set(ur, dotObj(k, v), { merge: true }); clearDirty(k); }   // meta
+    });
+    return batch;
+  }
+  // diff entri journal: tulis yang berubah/hilang saja
+  function pushJournalToBatch(batch, ur, list) {
+    var jr = ur.collection("journal");
+    var seen = {};
+    list.forEach(function (e) {
+      if (!e || !e.id) return;
+      seen[e.id] = true;
+      var json = JSON.stringify(e);
+      if (cloudJournalIdx[e.id] !== json) {
+        batch.set(jr.doc(e.id), e);
+        cloudJournalIdx[e.id] = json;
+      }
+    });
+    Object.keys(cloudJournalIdx).forEach(function (id) {
+      if (!seen[id]) { batch.delete(jr.doc(id)); delete cloudJournalIdx[id]; }
+    });
+  }
+  function pushKeys(keys) { return buildPushBatch(keys).commit(); }
+
+  function flushDirty() {
+    if (!fbUser || syncing) return;
+    var keys = dirtyKeys();
+    if (keys.length) {
+      pushKeys(keys).then(function () { renderAccount(); })
+        .catch(function () {
+          keys.forEach(function (k) { markDirty(k); });
+          toast("Sinkron tertunda (offline?) — akan dicoba lagi");
+          renderAccount();
+        });
+    }
+  }
+
+  // gabung journal: union per id; same account → salinan lokal menang jika ada dua versi
+  function mergeJournal(local, cloudArr, sameAccount) {
+    var localIdx = indexById(local), out = [];
+    cloudArr.forEach(function (c) {
+      if (c && c.id) localIdx[c.id] = (localIdx[c.id] && sameAccount) ? localIdx[c.id] : c;
+    });
+    Object.keys(localIdx).forEach(function (id) { out.push(localIdx[id]); });
+    out.sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
+    return out;
+  }
+
+  function pullAll() {
+    if (!fbUser) return;
+    syncing = true;
+    var ur = db.collection("users").doc(fbUser.uid);
+    var sameAccount = load("lastUid", null) === fbUser.uid;
+    Promise.all([ur.get(), ur.collection("lists").get(), ur.collection("journal").get()])
+      .then(function (res) {
+        var udoc = res[0], listsSnap = res[1], jSnap = res[2];
+        var cloud = { meta: {}, lists: {}, journal: [] };
+        cloudJournalIdx = {};
+        if (udoc.exists) {
+          var m = udoc.get("meta") || {};
+          META_KEYS.forEach(function (k) { if (m[k] !== undefined && m[k] !== null) cloud.meta[k] = m[k]; });
+        }
+        listsSnap.forEach(function (d) { cloud.lists[d.id] = d.data().data; });
+        jSnap.forEach(function (d) {
+          var e = d.data(); cloud.journal.push(e); cloudJournalIdx[e.id] = JSON.stringify(e);
+        });
+
+        // ---------- journal: union ----------
+        var localJ = load("journal", []);
+        var mergedJ = mergeJournal(localJ, cloud.journal, sameAccount);
+
+        // ---------- meta ----------
+        var ca = cloud.meta.acts, cb = cloud.meta.copyBest, cs = cloud.meta.settings, cp = cloud.meta.promptIdx;
+        if (sameAccount) {
+          // simpan preferensi/penanda lokal, gabung entri aktivitas & rekaman
+          if (ca) {
+            var la = load("acts", {});
+            Object.keys(ca).forEach(function (iso) { if (!la[iso] || !Object.keys(la[iso]).length) la[iso] = ca[iso]; });
+            saveLocal("acts", la);
+          }
+          if (cb) {
+            var lc = load("copyBest", {});
+            Object.keys(cb).forEach(function (k) { if (lc[k] === undefined || cb[k] > lc[k]) lc[k] = cb[k]; });
+            saveLocal("copyBest", lc);
+          }
+        } else {
+          if (ca) saveLocal("acts", ca);
+          else if (!Object.keys(load("acts", {})).length) saveLocal("acts", {});
+          if (cb && Object.keys(cb).length) saveLocal("copyBest", cb);
+          if (cs) saveLocal("settings", cs);                          // akun lain: cloud menang
+          if (cp !== undefined) saveLocal("promptIdx", cp);
+        }
+        if (cs && sameAccount) { /* pertahankan settings lokal (preferensi perangkat) */ }
+
+        // ---------- lists: cloud menang bila ada ----------
+        LIST_KEYS.forEach(function (k) {
+          if (cloud.lists[k] !== undefined) saveLocal(k, cloud.lists[k]);
+        });
+
+        // ---------- upload bagian lokal yang belum ada di cloud ----------
+        var batch = db.batch();
+        mergedJ.forEach(function (e) {
+          if (!cloudJournalIdx[e.id]) {
+            batch.set(ur.collection("journal").doc(e.id), e);
+            cloudJournalIdx[e.id] = JSON.stringify(e);
+          }
+        });
+        META_KEYS.forEach(function (k) {
+          var cloudVal = cloud.meta[k];
+          if (cloudVal === undefined) {
+            var v = load(k, null);
+            if (v !== null && v !== undefined) batch.set(ur, dotObj(k, v), { merge: true });
+          }
+        });
+        LIST_KEYS.forEach(function (k) {
+          if (cloud.lists[k] === undefined) {
+            var v = load(k, null);
+            if (v && v.length) batch.set(ur.collection("lists").doc(k), { data: v });
+          }
+        });
+
+        saveLocal("journal", mergedJ);
+        return batch.commit().catch(function () {
+          // gagal → paksa push ulang penuh pada flush berikutnya
+          cloudJournalIdx = {};
+          ["journal"].concat(LIST_KEYS, META_KEYS).forEach(markDirty);
+        });
+      })
+      .then(function () {
+        saveLocal("lastUid", fbUser.uid);
+        clearAllDirty();
+        syncing = false;
+        afterSync();
+        flushDirty();
+        toast("Data tersinkron dari akunmu ✓");
+      })
+      .catch(function (err) {
+        syncing = false;
+        renderAccount();
+        console.error("pullAll gagal", err);
+        toast("Gagal sinkron — periksa Firestore & internet");
+      });
+  }
+
+  function afterSync() {
+    // muat ulang state global & refresh semua tampilan
+    settings = load("settings", { name: "", goal: 150, theme: "dark" });
+    acts = load("acts", {});
+    copyBest = load("copyBest", {});
+    promptIdx = load("promptIdx", 0);
+    if (promptIdx < 0 || promptIdx >= PROMPTS.length) promptIdx = 0;
+    document.documentElement.dataset.theme = settings.theme || "dark";
+    $("#setName").value = settings.name || "";
+    $("#setGoal").value = settings.goal || 150;
+    themeSegRender();
+    $("#promptTag").textContent = PROMPTS[promptIdx][0];
+    $("#promptText").textContent = PROMPTS[promptIdx][1];
+    jCount(); jRenderDraftFlag();
+    renderJournalList(); renderTarget(); showBest();
+    renderReadingList(); renderCycleList(); renderErrStats(); renderErrList();
+    renderStreak(); renderDashboard(); renderAccount();
+  }
+
+  /* ---------------- UI halaman akun ---------------- */
+  function renderAccount() {
+    $("#accNoConfig").classList.toggle("hidden", cloudConfigured);
+    if (!cloudConfigured) return;
+    var signed = !!fbUser;
+    $("#accSignedOut").classList.toggle("hidden", signed);
+    $("#accSignedIn").classList.toggle("hidden", !signed);
+    if (!signed) return;
+    $("#accName").textContent = fbUser.displayName || fbUser.email || "Pengguna";
+    $("#accEmail").textContent = fbUser.email || "";
+    var ph = $("#accPhoto");
+    if (fbUser.photoURL) { ph.src = fbUser.photoURL; ph.style.display = ""; } else { ph.style.display = "none"; }
+    var pend = dirtyKeys().length;
+    $("#accSync").textContent =
+      "Sinkron otomatis aktif • perubahan ditulis ke Firestore saat data berubah" +
+      (pend ? " • " + pend + " kelompok data menunggu (kembali online?) ✔" : "");
+  }
+
+  function initCloud() {
+    if (!cloudConfigured) { renderAccount(); return; }
+    try {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      auth = firebase.auth();
+      db = firebase.firestore();
+    } catch (e) {
+      console.error("Firebase init gagal", e);
+      toast("Firebase gagal dimuat — mode lokal tetap jalan");
+      renderAccount();
+      return;
+    }
+
+    auth.onAuthStateChanged(function (u) {
+      fbUser = u;
+      if (u) {
+        pullAll();
+      } else {
+        renderAccount();
+      }
+    });
+
+    $("#btnGoogleLogin").addEventListener("click", function () {
+      var provider = new firebase.auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      auth.signInWithPopup(provider).catch(function (e) {
+        if (e && (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment")) {
+          auth.signInWithRedirect(provider);
+        } else if (e && e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
+          toast("Gagal masuk: " + e.code);
+        }
+        renderAccount();
+      });
+    });
+
+    $("#btnLogout").addEventListener("click", function () {
+      confirmBox("Keluar dari akun?", "Data yang sudah tersinkron tetap aman di cloud. Salinan lokal di browser ini dipertahankan, dan akan dipakai lagi kalau kamu masuk kembali.", function () {
+        auth.signOut().then(function () {
+          clearAllDirty();
+          renderAccount();
+          toast("Keluar — data lokal dipertahankan");
+        });
+      });
+    });
+
+    $("#btnSyncNow").addEventListener("click", function () {
+      if (!fbUser) { toast("Belum masuk."); return; }
+      if (syncing) { toast("Sinkron sedang berjalan…"); return; }
+      toast("Menarik data terbaru dari cloud…");
+      flushDirty();
+      pullAll();
+    });
+
+    window.addEventListener("online", flushDirty);
+    cloudReady = true;
+    renderAccount();
+  }
+
+
   $("#setName").value = settings.name || "";
   $("#setGoal").value = settings.goal || 150;
   function themeSegRender() {
@@ -1002,5 +1418,6 @@
   $("#dateChip").textContent = fmtDate(todayISO());
   document.documentElement.dataset.theme = settings.theme || "dark";
   renderStreak(); renderDashboard();
+  initCloud(); renderAccount();
   goto("dashboard");
 })();
