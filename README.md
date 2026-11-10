@@ -35,7 +35,7 @@ English-Writing-Trainer/
 | **Dashboard** | Sapaan, 5 statistik, kalender streak 5 minggu, checklist harian (4 metode) |
 | **Journaling** | 12 prompt acak, autosave draft, target kata terukur, riwayat + pencarian |
 | **Copywork** | 8 teks bawaan (opini/naratif/ekspositori/persuasif/dsl.) + teks sendiri; 2 mode: **Copy** (teks terlihat) dan **Recall** (teks mengabur, ketik dari ingatan); diff per kata berbasis LCS |
-| **Reading** | Tempat mencatat sumber bacaan, struktur kalimat & kolokasi |
+| **Reading** | **Bacaan online** (baru): artikel acak Wikipedia (Simple English/English) atau link artikel sendiri via r.jina.ai — dibaca langsung di app + **kuis pemahaman otomatis** (5 soal cloze siap pilih); hasil bisa dikirim ke catatan. Catatan: sumber + catatan struktur & kolokasi (tetap jalan offline) |
 | **Cycle** | Draft → Correct → Rewrite, dengan perbandingan otomatis + checklist 4 langkah. Draft step-1 bisa langsung dikirim Checker |
 | **Koreksi** (baru) | Checker grammar dengan 2 mesin: **offline ±50 aturan ESL** (agreement, article, preposisi, tense, double negative, spelling, tanda baca, kapitalisasi) + **online LanguageTool** ( gratis, tanpa API key). Saran per-saran bisa diterapkan, atau sekaligus dengan cascade otomatis; hasil bisa dikirim ke Cycle langkah 2 |
 | **Error Log** | Kategori kesalahan, statistik pola (bar), pencarian, export JSON |

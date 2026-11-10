@@ -208,6 +208,40 @@
     <!-- ---------- READING ---------- -->
     <section class="page hidden" id="page-reading">
       <div class="card">
+        <h2>Bacaan online — baca langsung di sini</h2>
+        <p class="sub">Artikel acak dari Wikipedia (tanpa internet? tak apa, fitur ini perlu internet). Setelah dibaca, uji pemahamanmu dengan pertanyaan otomatis, lalu catat pola kolokasinya di kartu catatan di bawah.</p>
+        <div class="row wrap gap8">
+          <select id="readSrcSel" class="input sm" style="max-width:250px;" aria-label="Sumber bacaan">
+            <option value="simple">Simple English — mudah (disarankan)</option>
+            <option value="en">English — standar</option>
+            <option value="custom">Link artikel sendiri…</option>
+          </select>
+          <input type="url" id="readUrl" class="input sm hidden" placeholder="https://artikel-yang-ingin-dibaca…" style="max-width:330px;">
+          <button class="btn primary sm" id="btnReadFetch" type="button">↻ Ambil bacaan</button>
+          <span class="meta" id="readStatus"></span>
+        </div>
+
+        <div id="readPane" class="hidden mt8">
+          <div class="row wrap gap8" style="align-items:center;">
+            <b id="readTitle"></b>
+            <a id="readLink" class="meta link-like" target="_blank" rel="noopener">sumber ↗</a>
+            <span class="meta" id="readMeta"></span>
+            <div class="spacer"></div>
+            <button class="btn ghost sm" id="btnReadToNotes" type="button" title="Isi kotak catatan di bawah dengan sumber artikel ini">⤳ Isi ke catatan</button>
+          </div>
+          <div id="readBody" class="read-body"></div>
+        </div>
+
+        <div id="readQuiz" class="hidden mt8">
+          <div class="step-head"><span class="step-num">?</span> Latihan pemahaman — isi kata yang hilang
+            <button class="btn ghost sm" id="btnReadNewQs" type="button">↻ Soal baru</button>
+          </div>
+          <div id="readQList" class="stack mt8"></div>
+          <p class="meta mt8" id="readQScore"></p>
+        </div>
+      </div>
+
+      <div class="card">
         <h2>Extensive reading</h2>
         <p class="sub">Menulis yang baik lahir dari membaca yang banyak. Saat membaca, catat pola yang kamu temukan.</p>
         <div class="pillar">

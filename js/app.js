@@ -103,7 +103,7 @@
     dashboard: ["Dashboard", "Ringkasan latihanmu hari ini"],
     journal: ["Journaling", "Metode 1 — menulis rutin dengan prompt harian"],
     copywork: ["Copywork", "Metode 2 — imitasi teks berkualitas untuk membangun intuisi"],
-    reading: ["Reading", "Metode 3 — extensive reading: catat struktur & kolokasi"],
+    reading: ["Reading", "Baca artikel online (Wikipedia) — lalu catat pola & uji pemahaman"],
     cycle: ["Cycle", "Metode 4 — draft → correct → rewrite"],
     corrector: ["Koreksi Grammar", "Periksa & koreksi grammar — aturan offline + LanguageTool online"],
     errors: ["Error Log", "Metode 5 — pelacakan kesalahan agar tidak terulang"],
@@ -588,6 +588,230 @@
     }
   });
   renderReadingList();
+
+  /* ---------------- reading online (Wikipedia + kuis cloze) ---------------- */
+  var READ_HOSTS = { simple: "https://simple.wikipedia.org", en: "https://en.wikipedia.org" };
+  var readArticle = null;   // { title, url, text, src }
+  var readQuestions = [];   // { sent, blankIdx, answer, options, correctIdx, done, ok }
+  var readAnswered = 0;
+
+  function wikiUrl(host) {
+    return host + "/w/api.php?action=query&format=json&origin=*&generator=random&grnnamespace=0&grnlimit=1&prop=extracts&explaintext=1";
+  }
+  function readTrim(text) {
+    // buang bagian referensi & potong di batas paragraf ~3000 karakter
+    var cutAt = text.search(/^(References?|External links?|See also|Notes?|Bibliography|Further reading|Gallery|Sources?|Footnotes?)\s*$/im);
+    if (cutAt > 240) text = text.slice(0, cutAt);
+    if (text.length > 3000) {
+      var cut = text.slice(0, 3000);
+      var lastP = cut.lastIndexOf("\n");
+      var lastS = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"));
+      text = cut.slice(0, (lastP > 400 ? lastP : lastS) + 1);
+    }
+    return text.trim();
+  }
+  function readFetchWiki(srcKey) {
+    $("#readStatus").textContent = "Mengambil artikel…";
+    $("#btnReadFetch").disabled = true;
+    var host = READ_HOSTS[srcKey];
+    function tryOnce(triesLeft) {
+      fetch(wikiUrl(host)).then(function (r) { return r.json(); }).then(function (j) {
+        var pages = (j.query && j.query.pages) ? Object.keys(j.query.pages).map(function (k) { return j.query.pages[k]; }) : [];
+        var p = pages[0];
+        var txt = p && typeof p.extract === "string" ? readTrim(p.extract) : "";
+        if (!p || p.missing !== undefined || txt.length < 350) {
+          if (triesLeft > 0) { tryOnce(triesLeft - 1); }        // artikel stub/kosong → coba lagi
+          else {
+            $("#btnReadFetch").disabled = false;
+            $("#readStatus").textContent = "";
+            toast("Artikel temuan terlalu pendek — coba lagi.");
+          }
+          return;
+        }
+        readArticle = {
+          title: p.title,
+          url: host + "/wiki/" + encodeURIComponent(p.title.replace(/ /g, "_")),
+          text: txt,
+          src: srcKey
+        };
+        $("#btnReadFetch").disabled = false;
+        save("readLast", readArticle);
+        renderReadArticle();
+      }).catch(function () {
+        $("#btnReadFetch").disabled = false;
+        $("#readStatus").textContent = "";
+        toast("Gagal mengambil — periksa internet.");
+      });
+    }
+    tryOnce(6);
+  }
+  function readFetchCustom(urlRaw) {
+    var url = (urlRaw || "").trim();
+    if (!/^https?:\/\//i.test(url)) { toast("Tempel URL yang benar (mulai https://)."); return; }
+    $("#readStatus").textContent = "Mengurai halaman…";
+    $("#btnReadFetch").disabled = true;
+    fetch("https://r.jina.ai/" + url).then(function (r) {
+      if (!r.ok) throw new Error("" + r.status);
+      return r.text();
+    }).then(function (md) {
+      // buang header meta r.jina.ai + rapikan markdown jadi teks polos
+      var title = "Artikel", body = md;
+      var mt = md.match(/^Title:\s*(.+)$/m);
+      if (mt) title = mt[1].trim();
+      body = body.replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").replace(/^Markdown Content:\s*/m, "");
+      body = body
+        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")            // gambar
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")          // link → teks
+        .replace(/\[\d+\]|\[citation needed\]/gi, "")     // referensi
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      body = readTrim(body.replace(/[#>_`*]+/g, ""));
+      if (body.length < 350) throw new Error("terlalu pendek");
+      readArticle = { title: title, url: url, text: body, src: "custom" };
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      save("readLast", readArticle);
+      renderReadArticle();
+    }).catch(function (e) {
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      toast("Gagal mengambil halaman (" + (e.message || "error") + ")");
+    });
+  }
+  function renderReadArticle() {
+    if (!readArticle) return;
+    $("#readTitle").textContent = readArticle.title;
+    $("#readLink").href = readArticle.url;
+    $("#readPane").classList.remove("hidden");
+    var words = countWords(readArticle.text);
+    $("#readMeta").textContent = countWords(readArticle.text) + " kata • ±" + Math.max(1, Math.round(words / 180)) + " menit";
+    var html = readArticle.text.split(/\n{1,}/).filter(function (p) { return p.trim(); }).map(function (p) {
+      return "<p>" + esc(p.trim()) + "</p>";
+    }).join("");
+    $("#readBody").innerHTML = html;
+    $("#readBody").scrollTop = 0;
+    buildReadQuiz();
+  }
+
+  // --- kuis: cloze dari kata panjang yang muncul satu kali di teks
+  function splitSents(text) {
+    var t = text.replace(/\n+/g, " ");
+    var out = [], m, re = /[^.!?]+[.!?]+["”')\]]?/g;
+    while ((m = re.exec(t)) !== null) { out.push(m[0].trim()); if (out.length > 300) break; }
+    return out;
+  }
+  function shuffleArr(a) {
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function buildReadQuiz() {
+    var sents = splitSents(readArticle.text).filter(function (s) {
+      var w = s.split(/\s+/).length;
+      return w >= 6 && w <= 30;
+    });
+    // hitung frekuensi kata "bernilai" di seluruh teks
+    var freq = {};
+    readArticle.text.replace(/[A-Za-z][A-Za-z'-]+/g, function (w) { freq[w.toLowerCase()] = (freq[w.toLowerCase()] || 0) + 1; return w; });
+    var pool = Object.keys(freq).filter(function (w) {
+      return freq[w] === 1 && w.length >= (readArticle.src === "simple" ? 6 : 7);
+    });
+    var rare = shuffleArr(pool.slice(0)).filter(function (w) { return w.length <= 13; });
+    readQuestions = []; readAnswered = 0;
+    var used = {};
+    for (var i = 0; i < sents.length && readQuestions.length < 5 && rare.length; i++) {
+      var s = sents[i];
+      var words = s.replace(/[^\w\s'-]/g, " ").split(/\s+/);
+      var placed = null, pos = -1;
+      for (var k = 0; k < words.length; k++) {
+        var w = words[k].toLowerCase();
+        if (freq[w] === 1 && w.length >= 5 && !used[w] && rare.indexOf(w) > -1) { placed = words[k]; pos = k; break; }
+      }
+      if (placed === null) continue;
+      used[placed.toLowerCase()] = true;
+      var distractors = shuffleArr(rare.filter(function (x) { return used[x] !== true && x !== placed.toLowerCase() && Math.abs(x.length - placed.length) <= 4; })).slice(0, 3);
+      while (distractors.length < 3 && rare.length > 3) {
+        var add = shuffleArr(rare.filter(function (x) { return used[x] !== true; }))[0];
+        if (!add || distractors.indexOf(add) > -1) break;
+        distractors.push(add);
+      }
+      if (distractors.length < 3) continue;
+      var options = shuffleArr([placed.toLowerCase()].concat(distractors));
+      var q = { sent: s, answer: placed.toLowerCase(), options: options, done: false, ok: false };
+      readQuestions.push(q);
+    }
+    renderReadQuiz();
+  }
+  function renderReadQuiz() {
+    var el = $("#readQList");
+    el.innerHTML = "";
+    $("#readQuiz").classList.toggle("hidden", !readQuestions.length);
+    if (!readQuestions.length) {
+      $("#readQScore").textContent = "Teks ini tidak cukup kaya untuk membuat soal — baca saja, lalu catat polanya.";
+      return;
+    }
+    readQuestions.forEach(function (q, qi) {
+      var li = document.createElement("div");
+      li.className = "entry rq";
+      // sisip titik blank di kata yang hilang (posisi kata pada kalimat asli)
+      var re = new RegExp("\\b" + q.answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+      var sentBlanked = q.sent.replace(re, "______");
+      li.innerHTML =
+        '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + "</span></div>" +
+        '<div class="entry-body" style="display:block;">' + esc(sentBlanked) + "</div>" +
+        '<div class="row wrap gap8" style="margin-top:8px;">' +
+        q.options.map(function (o, oi) {
+          return '<button class="btn ghost sm opt-btn" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
+        }).join("") +
+        "</div>";
+      el.appendChild(li);
+    });
+    $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " terjawab";
+  }
+  $("#readQuiz").addEventListener("click", function (e) {
+    var b = e.target.closest(".opt-btn");
+    if (!b || b.disabled) return;
+    var qi = +b.dataset.q, oi = +b.dataset.o;
+    var q = readQuestions[qi];
+    if (!q || q.done) return;
+    q.done = true;
+    q.ok = q.options[oi] === q.answer;
+    if (q.ok) readAnswered++;
+    // tandai tombol yang dipilih & tombol jawaban benar
+    $$("#readQList .opt-btn").forEach(function (btn) {
+      if (+btn.dataset.q !== qi) return;
+      var val = btn.textContent;
+      btn.disabled = true;
+      if (val === q.answer && !btn.classList.contains("correct")) btn.classList.add("correct");
+      if (btn === b && !q.ok) btn.classList.add("wrong");
+    });
+    if (readAnswered >= readQuestions.length) {
+      $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " benar! " +
+        (readAnswered === readQuestions.length ? "Pemahamanmu tajam 🎯" : readAnswered >= 3 ? "Sudah bagus — baca ulang bagian yang keliru." : "Coba baca ulang artikelnya, lalu Soal baru.");
+      if (!readArticle.counted) { readArticle.counted = true; save("readLast", readArticle); markDay("read"); renderDashboard(); toast("Bacaan dituntaskan ✓ streak jalan 🔥"); }
+    } else {
+      $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " benar";
+    }
+  });
+
+  $("#readSrcSel").addEventListener("change", function () {
+    $("#readUrl").classList.toggle("hidden", this.value !== "custom");
+    $("#btnReadFetch").textContent = this.value === "custom" ? "Baca artikel ↗" : "↻ Ambil bacaan";
+  });
+  $("#btnReadFetch").addEventListener("click", function () {
+    var v = $("#readSrcSel").value;
+    if (v === "custom") readFetchCustom($("#readUrl").value);
+    else readFetchWiki(v);
+  });
+  $("#btnReadNewQs").addEventListener("click", buildReadQuiz);
+  $("#btnReadToNotes").addEventListener("click", function () {
+    if (!readArticle) { toast("Ambil bacaan dulu."); return; }
+    $("#readSource").value = readArticle.title + " — " + readArticle.url;
+    $("#readNotes").focus();
+    toast("Sumber terisi — tulis catatan pola yang kamu temukan");
+  });
+  readArticle = load("readLast", null);
+  if (readArticle && readArticle.text) renderReadArticle();
 
   /* ---------------- cycle ---------------- */
   var cyIds = ["cyDraft", "cyFixed", "cyRewrite"];
