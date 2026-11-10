@@ -13,12 +13,11 @@ python -m http.server 8000
 ```
 
 ## Akses dari HP (hosting online)
-Folder ini bisa diunggah apa adanya ke hosting statis gratis:
-- **Netlify Drop** (paling cepat): buka `app.netlify.com/drop` → drag seluruh folder ini → dapat URL langsung.
-- **GitHub Pages**: push folder ini ke repo → Settings → Pages → branch `main`, folder `/root`.
-- **Cloudflare Pages**: buat project "Direct Upload" → upload folder ini.
+Aplikasi ini **sudah live di GitHub Pages**, di-deploy otomatis oleh `.github/workflows/deploy.yml` setiap ada push ke `main`:
 
-Setelah punya URL, di HP (Chrome Android / Safari iOS): menu → **Add to Home screen** — aplikasi muncul sebagai app dengan ikon sendiri berkat `manifest.json`. Data tetap di `localStorage` tiap perangkat; pindahkan pakai Export/Import di Pengaturan.
+> **https://mickyv18.github.io/Learning-Writing-English/**
+
+Di HP (Chrome Android / Safari iOS): menu browser → **Add to Home screen** — aplikasi muncul sebagai app dengan ikon sendiri berkat `manifest.json`. Data tetap di `localStorage` tiap perangkat; pindahkan pakai Export/Import di Pengaturan.
 
 
 ## Struktur
