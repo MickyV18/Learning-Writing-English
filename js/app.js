@@ -1621,14 +1621,15 @@
     });
   }
   // pastikan gist ada: sink detail dari cache, cari di daftar, atau buat baru
-  function kcEnsureGist(tok, cb) {
+  // pastikan gist ada: id dari cache → cari di daftar gist → atau buat baru
+  function kcEnsureGist(tok) {
     var id = load("kcGistId", "");
-    if (id) { cb(id); return; }
-    kcListGists(tok).then(function (l) {
+    if (id) return Promise.resolve(id);
+    return kcListGists(tok).then(function (l) {
       var found = kcFindGist(l);
-      if (found) { saveLocal("kcGistId", found); cb(found); return; }
-      return kcCreateGist(tok).then(cb);
-    }).catch(function (e) { throw e; });
+      if (found) { saveLocal("kcGistId", found); return found; }
+      return kcCreateGist(tok);
+    });
   }
 
   function kcPush(manual, cb) {
