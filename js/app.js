@@ -589,18 +589,103 @@
   });
   renderReadingList();
 
-  /* ---------------- reading online (Wikipedia + kuis cloze) ---------------- */
+  /* ---------------- reading online (Wikipedia + News in Levels + teks latihan bawaan) ---------------- */
   var READ_HOSTS = { simple: "https://simple.wikipedia.org", en: "https://en.wikipedia.org" };
-  var readArticle = null;   // { title, url, text, src }
-  var readQuestions = [];   // { sent, blankIdx, answer, options, correctIdx, done, ok }
-  var readAnswered = 0;
+  var NIL_HOST = "https://www.newsinlevels.com";
+  var readArticle = null;   // { title, url, text, src, libLv?, libQs?, disc?, counted? }
+  var readQuestions = [];   // tiap item: {kind:"cloze",sent,answer,options,done,ok} | {kind:"lib",text,options,ai,done,ok}
+  var readDone = 0, readCorrect = 0;
+
+  // Teks latihan bawaan (bisa offline): passage gaya tes reading ESL + soal pemahaman asli.
+  var READ_LIBRARY = [
+    { t: "The Lost Wallet", lv: "A2",
+      x: "Last Saturday, Maya was walking home from the market. On the sidewalk, she saw a brown wallet. It was old and almost empty, but inside there was 200,000 rupiah and a library card. The card had a name on it: Mr. Tan.\n\nMaya knew the name. Mr. Tan lived in her apartment building, on the fifth floor. He was quiet and he always said hello, but she did not know him well.\n\nSome people might keep the money, but Maya did not even think about it. She went straight to the fifth floor and knocked on Mr. Tan's door.\n\nMr. Tan opened the door slowly. When Maya showed him the wallet, his face changed. \"Thank you,\" he said. \"That library card is more important to me than the money. I use it every day.\"\n\nA week later, Maya found a small note under her door. It said: \"Thank you for being honest. Come for tea on Sunday.\" Now they are friends, and Maya always gets a cup of tea when she visits.",
+      q: [
+        { q: "Where did Maya find the wallet?", o: ["In the market", "On the sidewalk", "On the fifth floor", "Under her door"], a: 1 },
+        { q: "Why was the library card important to Mr. Tan?", o: ["He sold old cards", "He used it every day", "It had his money in it", "It was new and beautiful"], a: 1 },
+        { q: "What did Mr. Tan do a week later?", o: ["He moved to a new building", "He gave Maya the money", "He invited Maya for tea", "He went to the market"], a: 2 },
+        { q: "The story mainly shows that…", o: ["money is everything", "kindness can start a friendship", "markets are dangerous", "old people are lonely"], a: 1 }
+      ] },
+    { t: "Bread at Home", lv: "A2",
+      x: "Making bread at home is easier than many people think. You need only four things: flour, water, salt, and yeast.\n\nFirst, mix the flour and salt in a big bowl. Then add warm water and the yeast. Mix everything with a spoon until the dough is soft. Next, leave the dough in a warm place for two hours. The yeast makes the dough grow bigger. This is the most important step, so do not be impatient.\n\nAfter two hours, put the dough on a table and press it with your hands. Give it the shape you want: long, round, or small rolls. Then put it in the oven at 220 degrees for about thirty minutes.\n\nWhen the bread is ready, it will sound empty when you knock on the bottom. Wait before you cut it. Many people cut bread too early, and then the inside is still wet. If you wait twenty minutes, your bread will be perfect.",
+      q: [
+        { q: "What is the most important step?", o: ["Cutting the bread early", "Leaving the dough in a warm place", "Using cold water", "Pressing the dough on a table"], a: 1 },
+        { q: "How do you know the bread is ready?", o: ["It stops smelling", "It sounds empty when you knock on the bottom", "The oven turns off", "It falls when you touch it"], a: 1 },
+        { q: "What do many people do too early?", o: ["Add salt", "Cut the bread", "Open the oven", "Wash the bowl"], a: 1 },
+        { q: "How long does the dough rest?", o: ["Twenty minutes", "Thirty minutes", "Two hours", "Two days"], a: 2 }
+      ] },
+    { t: "The Night Bus", lv: "A2",
+      x: "When Diego missed the last train, he had to take the night bus home. The bus was almost empty. There was only an old woman with a big red bag, a student reading a book, and a man sleeping near the window.\n\nAt the third stop, the old woman stood up, but she forgot her red bag. Diego took the bag and ran after her, but the bus doors closed and the bus moved. He pressed the stop button, but it was too late.\n\nThe student looked up from her book. \"I know that bag,\" she said. \"The woman gets off at the hospital. We can take the bus back there.\" The sleeping man woke up and laughed. \"You are all very kind,\" he said. \"This is the friendliest bus in the city.\"\n\nTwenty minutes later, the bus came back to the hospital. The old woman was standing there with two police officers, but when she saw her red bag in Diego's hands, she smiled and everyone laughed. She offered to pay him, but Diego only asked for her name. \"I want to say hello next time,\" he said.",
+      q: [
+        { q: "Why was the bus almost empty?", o: ["It was very late at night", "The bus was broken", "Tickets were expensive", "It was a holiday"], a: 0 },
+        { q: "Who helped Diego find the woman?", o: ["The driver", "The police officers", "The student", "The sleeping man"], a: 2 },
+        { q: "Where did the bus go back to?", o: ["The market", "The train station", "The hospital", "The first stop"], a: 2 },
+        { q: "What did Diego want from the woman?", o: ["Money", "Her red bag back", "Her name", "A free ticket"], a: 2 }
+      ] },
+    { t: "Why Do We Yawn?", lv: "B1",
+      x: "For a long time, people believed that we yawn because our brain needs more oxygen. The idea is simple: when we are tired, we breathe slowly, so the brain gets less oxygen, and a yawn forces a big breath to fix it. It sounds logical, but scientists have tested it, and it is wrong. In experiments, people breathed pure oxygen, which should stop the yawning. It did not.\n\nA more modern idea points to temperature. According to this theory, the brain heats up when we are tired or bored, and yawning brings cool air into the body, cooling the brain so it can work better. This explains something strange: people yawn more in summer than in winter, when the air is cooler.\n\nThere is one more thing about yawning that scientists find interesting: it spreads. If you see, hear, or even read about a yawn, you will probably yawn within a few minutes. This \"contagious\" yawning seems connected to empathy, our ability to feel what other people feel. Studies show that people who score higher on empathy tests also yawn more often when they see others yawn.\n\nSo the next time a yawn travels around your classroom, remember: it is not about oxygen. Your brain is cooling itself, and your friends' brains are copying you.",
+      q: [
+        { q: "What did the old theory say?", o: ["Yawning cools the blood", "The brain needs more oxygen", "Yawning is a sign of illness", "Tired people breathe faster"], a: 1 },
+        { q: "Why do people yawn more in summer?", o: ["They are sleepier in summer", "The warmer air cools the brain less", "Oxygen levels drop in summer", "They read more in summer"], a: 1 },
+        { q: "Contagious yawning is connected to…", o: ["oxygen", "temperature", "empathy", "tiredness"], a: 2 },
+        { q: "What happened when people breathed pure oxygen?", o: ["They yawned less", "They stopped yawning completely", "They still yawned", "They yawned more often"], a: 2 }
+      ] },
+    { t: "The Rise of Working from Home", lv: "B1",
+      x: "Ten years ago, working from home was rare. Most companies believed that people could only work together in one office, and managers watched their employees from behind a desk. Today, millions of people work from home at least part of the week, and many say they will never go back to five days in an office.\n\nThe change has two sides. On the good side, workers save hours every day because they do not travel. They can eat lunch with their families, wear comfortable clothes, and work at the time when they feel most awake. Many companies also save money, because they need smaller offices.\n\nBut the new freedom has a price. Some people find it hard to stop working, because the laptop is always there, even at eleven at night. Others feel lonely without colleagues, and new workers learn less because nobody sits next to them to answer their questions. Managers also worry that it is harder to build trust through a screen.\n\nBecause of this, many companies now choose a middle way: two or three days in the office for meetings and teamwork, and the rest at home. It is not perfect, but it seems to be the future of work, at least for jobs that can be done on a computer.",
+      q: [
+        { q: "Why do workers save hours every day?", o: ["Offices are smaller", "They do not travel", "Meetings are shorter", "They eat at their desk"], a: 1 },
+        { q: "What is one negative for new workers?", o: ["They must work at night", "Nobody sits next to them to answer questions", "They wear uncomfortable clothes", "They pay for their lunch"], a: 1 },
+        { q: "Why do some managers worry?", o: ["Workers ask too many questions", "It is harder to build trust through a screen", "Offices cost more money", "Laptops break often"], a: 1 },
+        { q: "What is the \"middle way\" that many companies choose?", o: ["No office at all", "Five days in the office", "A few office days plus work at home", "Work only at night"], a: 2 }
+      ] },
+    { t: "Bees in Trouble", lv: "B1",
+      x: "When you see a bee in your garden, you might feel afraid. But these small insects are some of the most important animals on our planet. About one third of the food we eat, including apples, almonds, tomatoes, and coffee, depends on bees moving pollen from flower to flower.\n\nThe problem is simple and serious: bees are disappearing. In some regions, beekeepers lose 30 to 40 percent of their colonies every year. Scientists point to several causes. Pesticides used on farms can poison bees or damage their memory, so they cannot find their way home. A parasite called the varroa mite drinks their blood and spreads viruses. And modern farming creates huge fields with one crop and few flowers, so bees cannot find enough food.\n\nThe good news is that everyone can help. Planting flowers on a balcony, buying honey from local beekeepers, and avoiding pesticides in a garden are small actions, but thousands of small gardens together create a real \"highway\" of food for bees. Governments are starting to act too: several countries have banned the most dangerous pesticides, and farmers are learning to leave wild flowers at the edges of their fields.",
+      q: [
+        { q: "How much of our food depends on bees?", o: ["All of it", "About one third", "About one half", "Almost none"], a: 1 },
+        { q: "What does the varroa mite do?", o: ["It eats flowers", "It drinks bees' blood and spreads viruses", "It eats the honey", "It damages crops"], a: 1 },
+        { q: "Why do modern farm fields cause a problem for bees?", o: ["They are too small", "They have one crop and few flowers", "They are full of parasites", "They are too warm"], a: 1 },
+        { q: "What can a person with a balcony do to help?", o: ["Buy cheap honey", "Keep a colony in the house", "Plant flowers", "Avoid coffee"], a: 2 }
+      ] },
+    { t: "The Paradox of Choice", lv: "B2",
+      x: "Western culture tells us that more choice means more freedom and more happiness. A supermarket offers 200 kinds of breakfast cereal; a dating app shows thousands of possible partners; a streaming service offers more films than anyone could watch in a lifetime. Common sense says we should feel lucky. Yet psychologists have found that in many cases, more options make us less satisfied, not more.\n\nThe problem begins with expectation. When there are only two options, it is easy to choose and easy to accept the result. When there are four hundred, we start believing that a perfect option must exist, and after we choose, we compare our choice with everything we did not choose. Regret grows, and the pleasure of our decision shrinks. Choosing also costs mental energy, and the more options we face, the more tired our brain becomes; this is one reason people put off big decisions or make them carelessly.\n\nResearchers call the strongest sufferers \"maximisers\": people who feel they must find the single best option, check every possibility, and refuse to settle. Maximisers often make objectively better choices than \"satisficers\", who take the first option that is good enough. But maximisers also tend to feel worse about their lives. The lesson is uncomfortable for a culture built on abundance: to feel happier, do not look for the best choice. Look for a good one, take it, and stop looking.",
+      q: [
+        { q: "What does common sense say about choice?", o: ["More choice brings happiness", "Fewer options feel better", "Choosing is exhausting", "Choice is a human right"], a: 0 },
+        { q: "Why does regret grow when there are many options?", o: ["The best option always fails", "We compare our choice with everything we did not choose", "Sellers give wrong information", "We forget what we wanted"], a: 1 },
+        { q: "Who are \"maximisers\"?", o: ["People who take the first good option", "People who must find the single best option", "People who never buy anything", "Store managers"], a: 1 },
+        { q: "What is the lesson of the text?", o: ["Always check every possibility", "Avoid big decisions", "Pick a good option and stop looking", "Use apps to compare prices"], a: 2 }
+      ] },
+    { t: "Learning a Language as an Adult", lv: "B2",
+      x: "Adults often believe a myth about themselves: that children learn languages easily and adults cannot. Children do reach excellent pronunciation, and they never worry about mistakes. But in many other ways, adults are better learners. They already understand how grammar works, they can read explanations, and they can study on purpose, while a child simply plays for years.\n\nThe real problem is not ability but two habits. The first is impatience: adults compare themselves to native speakers after three months and decide they have no talent. The second is the fear of looking stupid. A child who says \"I goed to school\" gets a smile and a correction; an adult who makes the same mistake may feel ashamed and go silent. And silence, in language learning, is fatal: the skill grows only in the moments when we produce the language badly.\n\nResearch on \"comprehensible input\" adds a third piece of advice. The fastest learners read and listen to material slightly above their level: enough new words to grow, but few enough to follow the story. Graded readers, podcasts for learners, and TV with subtitles in the target language all do this job. Twenty minutes every day beats two hours on Sunday, because the brain builds memory between study sessions, not only during them.\n\nSo an adult learner's plan is simple: speak early, accept mistakes, read slightly difficult texts daily, and give it a year, not a month.",
+      q: [
+        { q: "In what way are children better than adults?", o: ["Understanding grammar", "Pronunciation", "Reading explanations", "Studying on purpose"], a: 1 },
+        { q: "What is \"fatal\" for adult learners?", o: ["Native speakers", "Grammar books", "Staying silent", "Short study sessions"], a: 2 },
+        { q: "What is \"comprehensible input\"?", o: ["Material slightly above your level", "Easy children's stories", "Lists of grammar rules", "Translation exercises"], a: 0 },
+        { q: "What does the research say about study time?", o: ["Two hours on Sunday is best", "Short daily sessions beat long rare ones", "Night study works best", "Only classroom study works"], a: 1 }
+      ] },
+    { t: "A Short History of Tea", lv: "B2",
+      x: "The story of tea begins in ancient China, where legend says the emperor Shen Nong discovered it around 2700 BCE when leaves from a wild tree blew into his pot of boiling water. For hundreds of years, tea was a medicine, drunk to stay awake and to treat illness. Only around the Tang dynasty did it become an everyday pleasure, and poets wrote about the calm it brought.\n\nTea reached Japan with Buddhist monks, who used it to stay awake during meditation; the Japanese later turned tea drinking into a ceremony about beauty and attention. In Europe, tea arrived in the seventeenth century and was at first a luxury for the rich, so expensive that people kept it in locked boxes. When prices fell, tea conquered England: by the 1800s, even workers drank sweet tea with every break, and the \"afternoon tea\" of the upper class became a national ritual.\n\nTea changed world history more than any other drink. It created global trade routes, and the British desire to control it contributed to wars, including the Opium Wars with China. In India, tea plantations were built by the British to break China's monopoly, and today India drinks more tea than any country except China itself.",
+      q: [
+        { q: "How was tea first used?", o: ["As food", "As a medicine", "In ceremonies", "For trade"], a: 1 },
+        { q: "Why was tea kept in locked boxes in Europe?", o: ["It was poisonous", "It was very expensive", "It smelled bad", "It was illegal"], a: 1 },
+        { q: "Why did the British build tea plantations in India?", o: ["Indian tea tasted better", "To break China's monopoly", "Buddhist monks asked for it", "The climate was warmer"], a: 1 },
+        { q: "What did Buddhist monks use tea for?", o: ["Cooking", "Healing wounds", "Staying awake during meditation", "Paying taxes"], a: 2 }
+      ] },
+    { t: "Sleep and the Teenage Brain", lv: "B2",
+      x: "Every school morning, millions of teenagers fight the same enemy: the alarm clock at six or seven. Their parents call them lazy, but biology tells another story. During adolescence, the body's internal clock moves later by one to two hours. A teenager who went to sleep at ten as a child now feels awake until midnight, yet still needs eight to ten hours of sleep. Early school times make this math impossible, and most teenagers build a large \"sleep debt\" during the week, then try to repay it on weekends.\n\nResearch shows that this debt is not harmless. Sleep is when the brain organizes what it learned during the day; cutting sleep cuts memory. Tired teenagers also show weaker self-control, more accidents, and higher rates of anxiety and depression. One American study followed schools that moved their start time from 7:30 to 8:30: students slept about an hour more, attendance improved, and car accidents among young drivers fell by around 16 percent.\n\nChanging schedules is politically hard, because buses, parents' work hours, and sports teams all depend on the old times. But some places are adapting: individual schools now experiment with later starts, and some doctors recommend that schools stop scheduling important exams in the first lesson. The science is clear enough that the question is no longer whether teenagers need later sleep, but how society wants to arrange it.",
+      q: [
+        { q: "What happens to the teenage body clock?", o: ["It moves earlier", "It moves later by one to two hours", "It stops working", "It stays the same"], a: 1 },
+        { q: "How much sleep do teenagers need?", o: ["About 6 hours", "About 6 to 7 hours", "About 8 to 10 hours", "About 12 hours"], a: 2 },
+        { q: "What happened in the American study?", o: ["Test scores fell", "Car accidents fell by about 16 percent", "Students woke up earlier", "Attendance got worse"], a: 1 },
+        { q: "Why is changing schedules hard?", o: ["Students refuse to change", "Buses and parents' schedules depend on the old times", "Teachers dislike sleeping", "No research exists"], a: 1 }
+      ] }
+  ];
 
   function wikiUrl(host) {
     return host + "/w/api.php?action=query&format=json&origin=*&generator=random&grnnamespace=0&grnlimit=1&prop=extracts&explaintext=1";
   }
   function readTrim(text) {
     // buang bagian referensi & potong di batas paragraf ~3000 karakter
-    var cutAt = text.search(/^(References?|External links?|See also|Notes?|Bibliography|Further reading|Gallery|Sources?|Footnotes?)\s*$/im);
+    var cutAt = text.search(/^(#{0,4}\s*)?(References?|External links?|See also|Notes?|Bibliography|Further reading|Gallery|Sources?|Footnotes?)\s*$/im);
     if (cutAt > 240) text = text.slice(0, cutAt);
     if (text.length > 3000) {
       var cut = text.slice(0, 3000);
@@ -650,23 +735,11 @@
     if (!/^https?:\/\//i.test(url)) { toast("Tempel URL yang benar (mulai https://)."); return; }
     $("#readStatus").textContent = "Mengurai halaman…";
     $("#btnReadFetch").disabled = true;
-    fetch("https://r.jina.ai/" + url).then(function (r) {
-      if (!r.ok) throw new Error("" + r.status);
-      return r.text();
-    }).then(function (md) {
-      // buang header meta r.jina.ai + rapikan markdown jadi teks polos
-      var title = "Artikel", body = md;
+    jinaFetch(url).then(function (md) {
+      var title = "Artikel", body = mdToText(md);
       var mt = md.match(/^Title:\s*(.+)$/m);
       if (mt) title = mt[1].trim();
-      body = body.replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").replace(/^Markdown Content:\s*/m, "");
-      body = body
-        .replace(/!\[[^\]]*\]\([^)]*\)/g, "")            // gambar
-        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")          // link → teks
-        .replace(/\[\d+\]|\[citation needed\]/gi, "")     // referensi
-        .replace(/[ \t]+/g, " ")
-        .replace(/\n{3,}/g, "\n\n")
-        .trim();
-      body = readTrim(body.replace(/[#>_`*]+/g, ""));
+      body = readTrim(body);
       if (body.length < 350) throw new Error("terlalu pendek");
       readArticle = { title: title, url: url, text: body, src: "custom" };
       $("#btnReadFetch").disabled = false;
@@ -679,19 +752,156 @@
       toast("Gagal mengambil halaman (" + (e.message || "error") + ")");
     });
   }
+  // fetch lewat ekstraktor r.jina.ai (CORS terbuka, tanpa API key)
+  function jinaFetch(url) {
+    return fetch("https://r.jina.ai/" + url).then(function (r) {
+      if (!r.ok) throw new Error("" + r.status);
+      return r.text();
+    });
+  }
+  // markdown r.jina.ai → teks rapi: gambar/link/bold dibuang, tabel jadi baris " · ", heading dipertahankan
+  function mdToText(md) {
+    var body = md
+      .replace(/^(Title|URL Source|Final URL|Published Time):.*$/gm, "")
+      .replace(/^Markdown Content:\s*/m, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")                         // gambar
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")                      // link → teks (2× utk link bersarang)
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")                            // bold
+      .replace(/(^|[\s(">])\*([^*\n]+)\*(?=[\s).,;:!?<]|$)/g, "$1$2") // italic
+      .replace(/`([^`]+)`/g, "$1")                                  // kode inline
+      .replace(/^>\s?/gm, "");                                      // blockquote
+    body = body.split("\n").map(function (l) {                       // tabel → baris teks
+      if (!/^\|/.test(l)) return l;
+      if (/^[\s|:\-]+$/.test(l)) return "";
+      return l.replace(/^\||\|$/g, "").split("|").map(function (c) { return c.trim(); }).filter(Boolean).join(" · ");
+    }).join("\n");
+    return body
+      .replace(/\[\d+\]|\[citation needed\]|\[edit\]/gi, "")        // referensi
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+  // teks → HTML rapi: paragraf, heading markdown → h3, list → ul
+  function readToHtml(text) {
+    var out = [];
+    text.split(/\n{2,}/).forEach(function (b0) {
+      var b = b0.replace(/[ \t]+/g, " ").trim();
+      if (!b) return;
+      var lines = b.split("\n").map(function (l) { return l.trim(); });
+      if (lines.every(function (l) { return /^[-*•]\s+/.test(l); })) {
+        out.push('<ul class="read-ul">' + lines.map(function (l) {
+          return "<li>" + esc(l.replace(/^[-*•]\s+/, "")) + "</li>";
+        }).join("") + "</ul>");
+        return;
+      }
+      if (lines.length === 1 && /^#{1,4}\s+/.test(lines[0])) {
+        out.push('<h3 class="read-h">' + esc(lines[0].replace(/^#{1,4}\s+/, "").replace(/[*_]+/g, "")) + "</h3>");
+        return;
+      }
+      out.push("<p>" + esc(b) + "</p>");
+    });
+    return out.join("");
+  }
   function renderReadArticle() {
     if (!readArticle) return;
     $("#readTitle").textContent = readArticle.title;
-    $("#readLink").href = readArticle.url;
+    $("#readLink").style.display = readArticle.url ? "" : "none";
+    if (readArticle.url) $("#readLink").href = readArticle.url;
     $("#readPane").classList.remove("hidden");
     var words = countWords(readArticle.text);
-    $("#readMeta").textContent = countWords(readArticle.text) + " kata • ±" + Math.max(1, Math.round(words / 180)) + " menit";
-    var html = readArticle.text.split(/\n{1,}/).filter(function (p) { return p.trim(); }).map(function (p) {
-      return "<p>" + esc(p.trim()) + "</p>";
-    }).join("");
-    $("#readBody").innerHTML = html;
+    var tag = readArticle.src === "lib" ? "teks latihan • level " + readArticle.libLv
+      : readArticle.src === "nil" ? "News in Levels • tingkat " + readArticle.nilLevel
+      : "Wikipedia";
+    $("#readMeta").textContent = tag + " • " + words + " kata • ±" + Math.max(1, Math.round(words / 180)) + " menit";
+    $("#readBody").innerHTML = readToHtml(readArticle.text) +
+      (readArticle.disc ? '<p class="read-disc"><b>Wacana:</b> ' + esc(readArticle.disc) + "</p>" : "");
     $("#readBody").scrollTop = 0;
     buildReadQuiz();
+  }
+
+  // --- sumber: teks latihan bawaan (offline), passage + soal pemahaman asli ---
+  function readFetchLib(levelKey, silent) {
+    var pool = READ_LIBRARY.filter(function (p) { return !levelKey || levelKey === "any" || p.lv === levelKey; });
+    if (!pool.length) pool = READ_LIBRARY.slice(0);
+    var oldT = readArticle && readArticle.src === "lib" ? readArticle.title : "";
+    if (pool.length > 1) {
+      var f = pool.filter(function (p) { return p.t !== oldT; });
+      if (f.length) pool = f;
+    }
+    var pick = pool[Math.floor(Math.random() * pool.length)];
+    readArticle = { title: pick.t, url: "", text: pick.x, src: "lib", libLv: pick.lv, libQs: pick.q };
+    $("#readStatus").textContent = "";
+    save("readLast", readArticle);
+    renderReadArticle();
+    if (!silent) toast("Teks latihan " + pick.lv + " dimuat — baca lalu jawab soalnya.");
+  }
+
+  // --- sumber: News in Levels, berita dunia utk pembelajar dalam 3 tingkat ---
+  function nilSlug(key) {
+    var map = { A2: "level-1", B1: "level-2", B2: "level-3" };
+    if (map[key]) return map[key];
+    var all = ["level-1", "level-2", "level-3"];
+    return all[Math.floor(Math.random() * all.length)];
+  }
+  function nilExtract(md) {
+    var s = md.indexOf("Markdown Content:");
+    var b = s > -1 ? md.slice(s + 17) : md;
+    var cut = b.search(/^### LEARN 3000 WORDS/m);
+    if (cut > -1) b = b.slice(0, cut);
+    cut = b.search(/^#### Test/m);
+    if (cut > -1) b = b.slice(0, cut);
+    var out = [], disc = "";
+    b.split("\n").forEach(function (l0) {
+      var l = l0.trim();
+      if (!l) { if (out.length && out[out.length - 1] !== "") out.push(""); return; }
+      if (/^!\[/.test(l)) return;                          // gambar
+      if (/^#{1,4}\s+/.test(l)) {                          // heading → kandidat pertanyaan wacana
+        var h = l.replace(/^#{1,4}\s+/, "");
+        if (/\?$/.test(h) && out.join(" ").length > 200 && !disc) disc = h;
+        return;
+      }
+      if (/^\*?\s*\[Level \d\]/.test(l)) return;           // pilihan tingkat
+      if (/^\d{1,2}-\d{1,2}-\d{4}/.test(l)) return;        // tanggal
+      if (/^You can watch the original/i.test(l)) return;
+      l = l.replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/!\[[^\]]*\]/g, "");   // gambar (juga bersarang)
+      l = l.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/\*{1,2}/g, "");
+      out.push(l);
+    });
+    return { text: out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), disc: disc };
+  }
+  function readFetchNil(levelKey, triesLeft) {
+    var lv = nilSlug(levelKey);
+    $("#readStatus").textContent = "Mengambil berita tingkat " + lv.replace("level-", "L") + "…";
+    $("#btnReadFetch").disabled = true;
+    jinaFetch(NIL_HOST + "/level/" + lv + "/").then(function (md) {
+      var links = [];
+      md.split("\n").forEach(function (l) {
+        var m = l.match(/^###\s*\[(.+?)\]\((https:\/\/www\.newsinlevels\.com\/products\/[^)\s]+)\)/);
+        if (m) links.push({ t: m[1], u: m[2] });
+      });
+      if (!links.length) throw new Error("daftar kosong");
+      var pick = links[Math.floor(Math.random() * links.length)];
+      return jinaFetch(pick.u).then(function (art) {
+        var ex = nilExtract(art);
+        if (ex.text.length < 250) throw new Error("terlalu pendek");
+        readArticle = {
+          title: pick.t.replace(/\s*[-–]\s*level\s*\d+\s*$/i, "").trim(),
+          url: pick.u, text: ex.text, src: "nil",
+          disc: ex.disc, nilLevel: lv.replace("level-", "")
+        };
+        $("#btnReadFetch").disabled = false;
+        $("#readStatus").textContent = "";
+        save("readLast", readArticle);
+        renderReadArticle();
+        toast("Berita tingkat " + lv.replace("level-", "L") + " dimuat ✓");
+      });
+    }).catch(function (e) {
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      if (triesLeft > 0 && String(e.message || e) === "terlalu pendek") { readFetchNil(levelKey, triesLeft - 1); return; }
+      toast("Gagal mengambil berita (" + (e.message || e) + ") — coba lagi.");
+    });
   }
 
   // --- kuis: cloze dari kata panjang yang muncul satu kali di teks
@@ -706,6 +916,8 @@
     return a;
   }
   function buildReadQuiz() {
+    if (readArticle && readArticle.libQs) { buildLibQuiz(); return; }
+    readQKind = "cloze";
     var sents = splitSents(readArticle.text).filter(function (s) {
       var w = s.split(/\s+/).length;
       return w >= 6 && w <= 30;
@@ -717,7 +929,7 @@
       return freq[w] === 1 && w.length >= (readArticle.src === "simple" ? 6 : 7);
     });
     var rare = shuffleArr(pool.slice(0)).filter(function (w) { return w.length <= 13; });
-    readQuestions = []; readAnswered = 0;
+    readQuestions = []; readDone = 0; readCorrect = 0;
     var used = {};
     for (var i = 0; i < sents.length && readQuestions.length < 5 && rare.length; i++) {
       var s = sents[i];
@@ -737,9 +949,18 @@
       }
       if (distractors.length < 3) continue;
       var options = shuffleArr([placed.toLowerCase()].concat(distractors));
-      var q = { sent: s, answer: placed.toLowerCase(), options: options, done: false, ok: false };
+      var q = { kind: "cloze", sent: s, answer: placed.toLowerCase(), options: options, done: false, ok: false };
       readQuestions.push(q);
     }
+    renderReadQuiz();
+  }
+  // kuis dari teks latihan bawaan: soal pemahaman asli, opsi diacak
+  function buildLibQuiz() {
+    readQuestions = shuffleArr(readArticle.libQs.slice(0)).map(function (q) {
+      var options = shuffleArr(q.o.slice(0));
+      return { kind: "lib", text: q.q, options: options, ai: options.indexOf(q.o[q.a]), done: false, ok: false };
+    });
+    readDone = 0; readCorrect = 0;
     renderReadQuiz();
   }
   function renderReadQuiz() {
@@ -753,12 +974,16 @@
     readQuestions.forEach(function (q, qi) {
       var li = document.createElement("div");
       li.className = "entry rq";
-      // sisip titik blank di kata yang hilang (posisi kata pada kalimat asli)
-      var re = new RegExp("\\b" + q.answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
-      var sentBlanked = q.sent.replace(re, "______");
+      // cloze: sisip titik blank di kata yang hilang; lib: pertanyaan utuh
+      var bodyHtml;
+      if (q.kind === "lib") bodyHtml = esc(q.text);
+      else {
+        var re = new RegExp("\\b" + q.answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+        bodyHtml = esc(q.sent.replace(re, "______"));
+      }
       li.innerHTML =
         '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + "</span></div>" +
-        '<div class="entry-body" style="display:block;">' + esc(sentBlanked) + "</div>" +
+        '<div class="entry-body" style="display:block;">' + bodyHtml + "</div>" +
         '<div class="row wrap gap8" style="margin-top:8px;">' +
         q.options.map(function (o, oi) {
           return '<button class="btn ghost sm opt-btn" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
@@ -766,7 +991,7 @@
         "</div>";
       el.appendChild(li);
     });
-    $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " terjawab";
+    $("#readQScore").textContent = "0/" + readQuestions.length + " dijawab";
   }
   $("#readQuiz").addEventListener("click", function (e) {
     var b = e.target.closest(".opt-btn");
@@ -775,41 +1000,49 @@
     var q = readQuestions[qi];
     if (!q || q.done) return;
     q.done = true;
-    q.ok = q.options[oi] === q.answer;
-    if (q.ok) readAnswered++;
-    // tandai tombol yang dipilih & tombol jawaban benar
+    q.ok = q.kind === "lib" ? (oi === q.ai) : (q.options[oi] === q.answer);
+    readDone++; if (q.ok) readCorrect++;
+    var ci = q.kind === "lib" ? q.ai : q.options.indexOf(q.answer); // tombol jawaban benar
     $$("#readQList .opt-btn").forEach(function (btn) {
       if (+btn.dataset.q !== qi) return;
-      var val = btn.textContent;
       btn.disabled = true;
-      if (val === q.answer && !btn.classList.contains("correct")) btn.classList.add("correct");
+      if (+btn.dataset.o === ci && !btn.classList.contains("correct")) btn.classList.add("correct");
       if (btn === b && !q.ok) btn.classList.add("wrong");
     });
-    if (readAnswered >= readQuestions.length) {
-      $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " benar! " +
-        (readAnswered === readQuestions.length ? "Pemahamanmu tajam 🎯" : readAnswered >= 3 ? "Sudah bagus — baca ulang bagian yang keliru." : "Coba baca ulang artikelnya, lalu Soal baru.");
+    var n = readQuestions.length;
+    if (readDone >= n) {
+      $("#readQScore").textContent = readCorrect + "/" + n + " benar. " +
+        (readCorrect === n ? "Sempurna — pemahamanmu tajam 🎯" : readCorrect >= Math.ceil(n * 0.6) ? "Bagus — baca ulang bagian yang keliru." : "Coba baca teksnya sekali lagi, lalu tekan Soal baru.");
       if (!readArticle.counted) { readArticle.counted = true; save("readLast", readArticle); markDay("read"); renderDashboard(); toast("Bacaan dituntaskan ✓ streak jalan 🔥"); }
     } else {
-      $("#readQScore").textContent = readAnswered + "/" + readQuestions.length + " benar";
+      $("#readQScore").textContent = readDone + "/" + n + " dijawab • " + readCorrect + " benar";
     }
   });
 
-  $("#readSrcSel").addEventListener("change", function () {
-    $("#readUrl").classList.toggle("hidden", this.value !== "custom");
-    $("#btnReadFetch").textContent = this.value === "custom" ? "Baca artikel ↗" : "↻ Ambil bacaan";
-  });
+  function syncReadSrc(v) {
+    $("#readUrl").classList.toggle("hidden", v !== "custom");
+    $("#readLibLevel").classList.toggle("hidden", !(v === "lib" || v === "nil"));
+    $("#btnReadFetch").textContent = v === "custom" ? "Baca artikel ↗" : v === "lib" ? "↻ Latihan baru" : v === "nil" ? "↻ Berita baru" : "↻ Ambil bacaan";
+  }
+  $("#readSrcSel").addEventListener("change", function () { syncReadSrc(this.value); });
   $("#btnReadFetch").addEventListener("click", function () {
     var v = $("#readSrcSel").value;
     if (v === "custom") readFetchCustom($("#readUrl").value);
+    else if (v === "lib") readFetchLib($("#readLibLevel").value, false);
+    else if (v === "nil") readFetchNil($("#readLibLevel").value, 3);
     else readFetchWiki(v);
   });
-  $("#btnReadNewQs").addEventListener("click", buildReadQuiz);
+  $("#btnReadNewQs").addEventListener("click", function () {
+    if (readArticle && readArticle.src === "lib") readFetchLib($("#readLibLevel").value, true);  // passage baru
+    else if (readArticle) buildReadQuiz();                                                        // soal cloze baru
+  });
   $("#btnReadToNotes").addEventListener("click", function () {
     if (!readArticle) { toast("Ambil bacaan dulu."); return; }
-    $("#readSource").value = readArticle.title + " — " + readArticle.url;
+    $("#readSource").value = readArticle.title + " — " + (readArticle.url || "(teks latihan internal)");
     $("#readNotes").focus();
     toast("Sumber terisi — tulis catatan pola yang kamu temukan");
   });
+  syncReadSrc($("#readSrcSel").value);
   readArticle = load("readLast", null);
   if (readArticle && readArticle.text) renderReadArticle();
 

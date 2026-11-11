@@ -209,12 +209,20 @@
     <section class="page hidden" id="page-reading">
       <div class="card">
         <h2>Bacaan online — baca langsung di sini</h2>
-        <p class="sub">Artikel acak dari Wikipedia (tanpa internet? tak apa, fitur ini perlu internet). Setelah dibaca, uji pemahamanmu dengan pertanyaan otomatis, lalu catat pola kolokasinya di kartu catatan di bawah.</p>
+        <p class="sub">Latihan reading bertingkat (A2–B2), berita berbahasa Inggris untuk pembelajar, atau artikel Wikipedia — setelah dibaca, uji pemahamanmu, lalu catat pola kolokasinya di kartu catatan di bawah.</p>
         <div class="row wrap gap8">
-          <select id="readSrcSel" class="input sm" style="max-width:250px;" aria-label="Sumber bacaan">
-            <option value="simple">Simple English — mudah (disarankan)</option>
-            <option value="en">English — standar</option>
+          <select id="readSrcSel" class="input sm" style="max-width:270px;" aria-label="Sumber bacaan">
+            <option value="lib">Latihan reading — tes kemampuan (A2–B2)</option>
+            <option value="nil">Berita bertingkat — News in Levels</option>
+            <option value="simple">Simple English Wikipedia — mudah</option>
+            <option value="en">English Wikipedia — standar</option>
             <option value="custom">Link artikel sendiri…</option>
+          </select>
+          <select id="readLibLevel" class="input sm hidden" style="max-width:150px;" aria-label="Tingkat kesulitan">
+            <option value="any">Tingkat: acak</option>
+            <option value="A2">A2 — dasar</option>
+            <option value="B1">B1 — menengah</option>
+            <option value="B2">B2 — mahir</option>
           </select>
           <input type="url" id="readUrl" class="input sm hidden" placeholder="https://artikel-yang-ingin-dibaca…" style="max-width:330px;">
           <button class="btn primary sm" id="btnReadFetch" type="button">↻ Ambil bacaan</button>
