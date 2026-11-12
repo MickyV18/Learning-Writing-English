@@ -1029,7 +1029,6 @@
   }
   function buildReadQuiz() {
     if (readArticle && readArticle.libQs) { buildLibQuiz(); return; }
-    readQKind = "cloze";
     var sents = splitSents(readArticle.text).filter(function (s) {
       var w = s.split(/\s+/).length;
       return w >= 6 && w <= 30;
