@@ -198,9 +198,9 @@
     var today = acts[todayISO()] ? Object.keys(acts[todayISO()]).length : 0;
     $("#greetMsg").textContent = T_DONE[Math.min(today, 4)];
 
-    // checklist bars
+    // checklist bars (Cycle tidak lagi masuk checklist — tetap dihitung untuk streak)
     var t = acts[todayISO()] || {};
-    [["journal", t.journal || 0], ["copy", t.copy || 0], ["read", t.read || 0], ["cyc", t.cyc || 0]].forEach(function (p) {
+    [["journal", t.journal || 0], ["copy", t.copy || 0], ["read", t.read || 0]].forEach(function (p) {
       var f = $("#ck-" + p[0]);
       f.style.width = Math.min(100, p[1] / 1 * 100) + "%";
       f.style.background = p[1] ? "var(--green)" : "var(--accent)";
@@ -1018,21 +1018,18 @@
 
   // --- kuis: cloze dari kata panjang yang muncul satu kali di teks
   function splitSents(text) {
-    var t = text.replace(/\n+/g, " ");
+    // lindungi angka desimal agar tidak dianggap akhir kalimat (0.7% ≠ "0." + "7")
+    var t = text.replace(/\n+/g, " ").replace(/(\d)\.(\d)/g, "$1\uF02E$2");
     var out = [], m, re = /[^.!?]+[.!?]+["”')\]]?/g;
-    while ((m = re.exec(t)) !== null) { out.push(m[0].trim()); if (out.length > 300) break; }
+    while ((m = re.exec(t)) !== null) { out.push(m[0].replace(/\uF02E/g, ".").trim()); if (out.length > 300) break; }
     return out;
   }
   function shuffleArr(a) {
     for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
-  function buildReadQuiz() {
-    if (readArticle && readArticle.libQs) { buildLibQuiz(); return; }
-    var sents = splitSents(readArticle.text).filter(function (s) {
-      var w = s.split(/\s+/).length;
-      return w >= 6 && w <= 30;
-    });
+  /* ---------- generator soal campuran: kosakata, grammar, detail angka, kalimat ---------- */
+  function buildClozeQs(sents, want) {
     // hitung frekuensi kata "bernilai" di seluruh teks
     var freq = {};
     readArticle.text.replace(/[A-Za-z][A-Za-z'-]+/g, function (w) { freq[w.toLowerCase()] = (freq[w.toLowerCase()] || 0) + 1; return w; });
@@ -1040,15 +1037,14 @@
       return freq[w] === 1 && w.length >= (readArticle.src === "simple" ? 6 : 7);
     });
     var rare = shuffleArr(pool.slice(0)).filter(function (w) { return w.length <= 13; });
-    readQuestions = []; readDone = 0; readCorrect = 0;
-    var used = {};
-    for (var i = 0; i < sents.length && readQuestions.length < 5 && rare.length; i++) {
+    var used = {}, out = [];
+    for (var i = 0; i < sents.length && out.length < want && rare.length; i++) {
       var s = sents[i];
       var words = s.replace(/[^\w\s'-]/g, " ").split(/\s+/);
-      var placed = null, pos = -1;
+      var placed = null;
       for (var k = 0; k < words.length; k++) {
         var w = words[k].toLowerCase();
-        if (freq[w] === 1 && w.length >= 5 && !used[w] && rare.indexOf(w) > -1) { placed = words[k]; pos = k; break; }
+        if (freq[w] === 1 && w.length >= 5 && !used[w] && rare.indexOf(w) > -1) { placed = words[k]; break; }
       }
       if (placed === null) continue;
       used[placed.toLowerCase()] = true;
@@ -1059,18 +1055,119 @@
         distractors.push(add);
       }
       if (distractors.length < 3) continue;
-      var options = shuffleArr([placed.toLowerCase()].concat(distractors));
-      var q = { kind: "cloze", sent: s, answer: placed.toLowerCase(), options: options, done: false, ok: false };
-      readQuestions.push(q);
+      out.push({ kind: "cloze", sent: s, answer: placed.toLowerCase(), options: shuffleArr([placed.toLowerCase()].concat(distractors)), done: false, ok: false });
     }
+    return out;
+  }
+  // grammar: kosongkan kata fungsi (preposisi, verba bantu, kata hubung, pronomina, artikel)
+  function buildGramQs(sents, want) {
+    var CATS = [
+      ["in", "on", "at", "for", "with", "by", "from"],
+      ["is", "are", "was", "were", "has", "have", "had"],
+      ["but", "because", "although", "while", "so", "however"],
+      ["it", "they", "this", "these", "them", "he", "she"],
+      ["a", "an", "the", "this", "that"]
+    ];
+    var cands = [];
+    sents.forEach(function (s) {
+      if (s.split(/\s+/).length < 6) return;
+      var seen = {}, words = s.split(/\s+/);
+      for (var i = 0; i < words.length; i++) {
+        var w = words[i].toLowerCase().replace(/[^a-z']/g, "");
+        if (!w || seen[w]) continue;
+        for (var c = 0; c < CATS.length; c++) {
+          if (CATS[c].indexOf(w) > -1) {
+            seen[w] = true;
+            if (i > 0) cands.push({ w: w, cat: c, sent: s });   // jangan kata pertama kalimat
+            break;
+          }
+        }
+      }
+    });
+    shuffleArr(cands);
+    var usedCat = {}, usedSent = {}, out = [];
+    for (var i = 0; i < cands.length && out.length < want; i++) {
+      var cd = cands[i];
+      if (usedCat[cd.cat] || usedSent[cd.sent]) continue;        // 1 kategori per soal → bervariasi
+      var dis = shuffleArr(CATS[cd.cat].filter(function (x) { return x !== cd.w; })).slice(0, 3);
+      if (dis.length < 3) continue;
+      out.push({ kind: "gram", sent: cd.sent, answer: cd.w, options: shuffleArr([cd.w].concat(dis)), done: false, ok: false });
+      usedCat[cd.cat] = true; usedSent[cd.sent] = true;
+    }
+    return out;
+  }
+  // detail: kosongkan angka pada kalimat fakta — melatih scanning informasi spesifik
+  function buildNumQs(sents, want) {
+    var out = [], used = {};
+    shuffleArr(sents.slice(0)).forEach(function (s) {
+      if (out.length >= want) return;
+      var m = s.match(/\b\d+(\.\d+)?\b/);
+      if (!m) return;
+      var ans = m[0], n = parseFloat(ans);
+      if (!isFinite(n) || n === 0 || used[ans]) return;
+      var ds = [];
+      [n * 2, Math.round(n / 2), n + (n < 10 ? 2 : Math.max(10, Math.round(n * 0.1)))].forEach(function (v) {
+        if (isFinite(v) && v !== n && String(v) !== ans && ds.indexOf(String(v)) === -1 && ds.length < 3) ds.push(String(v));
+      });
+      if (ds.length < 3) return;
+      used[ans] = true;
+      out.push({ kind: "detail", sent: s, answer: ans, options: shuffleArr([ans].concat(ds)), done: false, ok: false });
+    });
+    return out;
+  }
+  // kalimat mana yang muncul di teks — pengecoh diambil dari passage lain
+  function buildSentQ() {
+    var cands = splitSents(readArticle.text).filter(function (s) {
+      var w = s.split(/\s+/).length;
+      return w >= 8 && w <= 24;
+    });
+    if (!cands.length) return null;
+    var ans = cands[Math.floor(Math.random() * cands.length)];
+    var norm = function (s) { return s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim(); };
+    var an = norm(ans), dis = [], tried = {}, pool = [];
+    READ_LIBRARY.forEach(function (p) {
+      if (p.x === readArticle.text) return;
+      splitSents(p.x).forEach(function (s) {
+        var w = s.split(/\s+/).length;
+        if (w >= 8 && w <= 24) pool.push(s);
+      });
+    });
+    shuffleArr(pool).forEach(function (s) {
+      var n = norm(s);
+      if (n === an || tried[n] || dis.length >= 3) return;
+      tried[n] = true; dis.push(s);
+    });
+    if (dis.length < 3) return null;
+    return { kind: "sent", text: "Kalimat manakah yang muncul di dalam teks?", answer: ans, options: shuffleArr([ans].concat(dis)), done: false, ok: false };
+  }
+
+  function buildReadQuiz() {
+    if (readArticle && readArticle.libQs) { buildLibQuiz(); return; }
+    var sents = splitSents(readArticle.text).filter(function (s) {
+      var w = s.split(/\s+/).length;
+      return w >= 6 && w <= 30;
+    });
+    var cloze = buildClozeQs(sents, 5);
+    var qs = cloze.slice(0, 3).concat(buildGramQs(sents, 3)).concat(buildNumQs(sents, 2));
+    if (qs.length < 6) qs = qs.concat(cloze.slice(3, 3 + (6 - qs.length)));   // teks miskin → isi cloze ekstra
+    readQuestions = qs.slice(0, 8);
+    readDone = 0; readCorrect = 0;
     renderReadQuiz();
   }
-  // kuis dari teks latihan bawaan: soal pemahaman asli, opsi diacak
+  // kuis dari teks latihan bawaan: 4 soal pemahaman asli + 5 soal generator (lebih berat & bervariasi)
   function buildLibQuiz() {
-    readQuestions = shuffleArr(readArticle.libQs.slice(0)).map(function (q) {
+    var hand = shuffleArr(readArticle.libQs.slice(0)).map(function (q) {
       var options = shuffleArr(q.o.slice(0));
       return { kind: "lib", text: q.q, options: options, ai: options.indexOf(q.o[q.a]), done: false, ok: false };
     });
+    var sents = splitSents(readArticle.text).filter(function (s) {
+      var w = s.split(/\s+/).length;
+      return w >= 6 && w <= 30;
+    });
+    var auto = buildGramQs(sents, 2).concat(buildClozeQs(sents, 1)).concat(buildNumQs(sents, 1));
+    var sq = buildSentQ();
+    if (sq) auto.push(sq);
+    readQuestions = hand.concat(auto);
     readDone = 0; readCorrect = 0;
     renderReadQuiz();
   }
@@ -1085,19 +1182,20 @@
     readQuestions.forEach(function (q, qi) {
       var li = document.createElement("div");
       li.className = "entry rq";
-      // cloze: sisip titik blank di kata yang hilang; lib: pertanyaan utuh
+      var KIND_LBL = { lib: "pemahaman", cloze: "kosakata", gram: "grammar", detail: "detail angka", sent: "kalimat dari teks" };
+      // cloze/gram/detail: sisip titik blank; lib/sent: pertanyaan utuh
       var bodyHtml;
-      if (q.kind === "lib") bodyHtml = esc(q.text);
+      if (q.kind === "lib" || q.kind === "sent") bodyHtml = esc(q.text);
       else {
         var re = new RegExp("\\b" + q.answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
         bodyHtml = esc(q.sent.replace(re, "______"));
       }
       li.innerHTML =
-        '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + "</span></div>" +
+        '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + (KIND_LBL[q.kind] ? " • " + KIND_LBL[q.kind] : "") + "</span></div>" +
         '<div class="entry-body" style="display:block;">' + bodyHtml + "</div>" +
-        '<div class="row wrap gap8" style="margin-top:8px;">' +
+        '<div class="row wrap gap8' + (q.kind === "sent" ? " opt-col" : "") + '" style="margin-top:8px;">' +
         q.options.map(function (o, oi) {
-          return '<button class="btn ghost sm opt-btn" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
+          return '<button class="btn ghost sm opt-btn' + (q.kind === "sent" ? " opt-long" : "") + '" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
         }).join("") +
         "</div>";
       el.appendChild(li);
@@ -2336,5 +2434,15 @@
   if ("serviceWorker" in navigator && location.protocol === "https:") {
     navigator.serviceWorker.register("sw.js").catch(function (e) { console.warn("sw:", e); });
   }
+  // sidebar mini — statusnya per perangkat, tidak ikut sinkron
+  var sideMin = !!+load("sideMin", 0);
+  if (sideMin) document.querySelector(".app").classList.add("min");
+  $("#btnSideTog").textContent = sideMin ? "»" : "«";
+  $("#btnSideTog").addEventListener("click", function () {
+    sideMin = !sideMin;
+    document.querySelector(".app").classList.toggle("min", sideMin);
+    this.textContent = sideMin ? "»" : "«";
+    saveLocal("sideMin", sideMin ? 1 : 0);
+  });
   goto("dashboard");
 })();

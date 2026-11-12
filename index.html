@@ -22,44 +22,45 @@
         <div class="brand-name">Writing Trainer</div>
         <div class="brand-sub">English practice system</div>
       </div>
+      <button class="side-tog" id="btnSideTog" type="button" title="Perkecil / perluas sidebar">«</button>
     </div>
 
     <nav class="nav" aria-label="Navigasi utama">
-      <button class="nav-item" data-page="dashboard" aria-current="page">
-        <span class="nav-ico">▦</span> Dashboard
+      <button class="nav-item" data-page="dashboard" aria-current="page" title="Dashboard">
+        <span class="nav-ico">▦</span> <span class="nav-lbl">Dashboard</span>
       </button>
-      <button class="nav-item" data-page="journal">
-        <span class="nav-ico">✎</span> Journaling
+      <button class="nav-item" data-page="journal" title="Journaling">
+        <span class="nav-ico">✎</span> <span class="nav-lbl">Journaling</span>
       </button>
-      <button class="nav-item" data-page="copywork">
-        <span class="nav-ico">⧉</span> Copywork
+      <button class="nav-item" data-page="copywork" title="Copywork">
+        <span class="nav-ico">⧉</span> <span class="nav-lbl">Copywork</span>
       </button>
-      <button class="nav-item" data-page="reading">
-        <span class="nav-ico">☰</span> Reading
+      <button class="nav-item" data-page="reading" title="Reading">
+        <span class="nav-ico">☰</span> <span class="nav-lbl">Reading</span>
       </button>
-      <button class="nav-item" data-page="cycle">
-        <span class="nav-ico">↻</span> Cycle
+      <button class="nav-item" data-page="cycle" title="Cycle">
+        <span class="nav-ico">↻</span> <span class="nav-lbl">Cycle</span>
       </button>
-      <button class="nav-item" data-page="corrector">
-        <span class="nav-ico">✓</span> Koreksi
+      <button class="nav-item" data-page="corrector" title="Koreksi">
+        <span class="nav-ico">✓</span> <span class="nav-lbl">Koreksi</span>
       </button>
-      <button class="nav-item" data-page="errors">
-        <span class="nav-ico">⚑</span> Error Log
+      <button class="nav-item" data-page="errors" title="Error Log">
+        <span class="nav-ico">⚑</span> <span class="nav-lbl">Error Log</span>
       </button>
-      <button class="nav-item" data-page="plan">
-        <span class="nav-ico">▦</span> Rencana
+      <button class="nav-item" data-page="plan" title="Rencana">
+        <span class="nav-ico">▦</span> <span class="nav-lbl">Rencana</span>
       </button>
-      <button class="nav-item" data-page="account">
-        <span class="nav-ico">👤</span> Akun
+      <button class="nav-item" data-page="account" title="Akun">
+        <span class="nav-ico">👤</span> <span class="nav-lbl">Akun</span>
       </button>
-      <button class="nav-item" data-page="settings">
-        <span class="nav-ico">⚙</span> Pengaturan
+      <button class="nav-item" data-page="settings" title="Pengaturan">
+        <span class="nav-ico">⚙</span> <span class="nav-lbl">Pengaturan</span>
       </button>
     </nav>
 
     <div class="sidebar-foot">
       <div class="streak-chip" id="streakChip" title="Hari berturut-turut dengan minimal 1 aktivitas">
-        <span>🔥</span> <b id="streakChipNum">0</b> hari streak
+        <span>🔥</span> <b id="streakChipNum">0</b> <span class="streak-lbl">hari streak</span>
       </div>
     </div>
   </aside>
@@ -118,10 +119,6 @@
           <div class="check-item">
             <div class="check-label"><span>☰</span> Reading note</div>
             <div class="progress"><div class="progress-fill" id="ck-read"></div></div>
-          </div>
-          <div class="check-item">
-            <div class="check-label"><span>↻</span> Cycle</div>
-            <div class="progress"><div class="progress-fill" id="ck-cyc"></div></div>
           </div>
         </div>
       </div>
