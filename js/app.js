@@ -1655,7 +1655,7 @@
   var META_KEYS = ["settings", "acts", "copyBest", "promptIdx"];
   var LIST_KEYS = ["readings", "cycles", "errors"];
 
-  var cloudConfigured = typeof firebase !== "undefined" && typeof FIREBASE_CONFIG !== "undefined" && !!FIREBASE_CONFIG.apiKey;
+  var cloudConfigured = typeof FIREBASE_CONFIG !== "undefined" && !!FIREBASE_CONFIG.apiKey;
   var cloudReady = false;      // true setelah init — baru save() boleh menyentuh cloud
   var syncing = false;         // pull/push besar berjalan — write-through dipause
   var fbUser = null;
@@ -2173,6 +2173,54 @@
 
   function initCloud() {
     if (!cloudConfigured) { renderAccount(); return; }
+    // SDK Firebase diunduh LAZY: hanya saat user benar-benar mau masuk.
+    // Sebelumnya 3 SDK (~500 KB) dimuat sinkron tiap buka app — penyebab buka-app terasa lamban.
+    $("#btnGoogleLogin").addEventListener("click", function () {
+      toast("Menyiapkan layanan akun…");
+      fbLoad().then(function () {
+        initFirebaseCore();
+        var provider = new firebase.auth.GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: "select_account" });
+        auth.signInWithPopup(provider).catch(function (e) {
+          if (e && (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment")) {
+            auth.signInWithRedirect(provider);
+          } else if (e && e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
+            toast("Gagal masuk: " + e.code);
+          }
+          renderAccount();
+        });
+      }).catch(function (e) {
+        console.warn("fbLoad:", e);
+        toast("Firebase gagal dimuat — mode lokal tetap jalan");
+      });
+    });
+    cloudReady = false;   // baru true setelah inti Firebase siap
+    renderAccount();
+  }
+
+  // muat 3 SDK Firebase sekali, di belakang layar, saat dibutuhkan
+  var fbLoadPromise = null;
+  function fbLoad() {
+    if (fbLoadPromise) return fbLoadPromise;
+    var base = "https://www.gstatic.com/firebasejs/10.12.5/";
+    fbLoadPromise = Promise.all([
+      "firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js"
+    ].map(function (f) {
+      return new Promise(function (res, rej) {
+        var s = document.createElement("script");
+        s.src = base + f;
+        s.async = true;
+        s.onload = res;
+        s.onerror = function () { rej(new Error("gagal memuat " + f)); };
+        document.head.appendChild(s);
+      });
+    }));
+    return fbLoadPromise;
+  }
+
+  var fbCoreInited = false;
+  function initFirebaseCore() {
+    if (fbCoreInited) return;
     try {
       firebase.initializeApp(FIREBASE_CONFIG);
       auth = firebase.auth();
@@ -2183,27 +2231,11 @@
       renderAccount();
       return;
     }
-
+    fbCoreInited = true;
     auth.onAuthStateChanged(function (u) {
       fbUser = u;
-      if (u) {
-        pullAll();
-      } else {
-        renderAccount();
-      }
-    });
-
-    $("#btnGoogleLogin").addEventListener("click", function () {
-      var provider = new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-      auth.signInWithPopup(provider).catch(function (e) {
-        if (e && (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment")) {
-          auth.signInWithRedirect(provider);
-        } else if (e && e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") {
-          toast("Gagal masuk: " + e.code);
-        }
-        renderAccount();
-      });
+      if (u) pullAll();
+      else renderAccount();
     });
 
     $("#btnLogout").addEventListener("click", function () {
@@ -2297,6 +2329,13 @@
   document.documentElement.dataset.theme = settings.theme || "dark";
   renderStreak(); renderDashboard();
   initCloud(); renderAccount();
-  if (kcToken()) setTimeout(function () { kcPull({ silent: true }); }, 800);   // tarik cloud saat app dibuka
+  if (kcToken() && Date.now() - (+load("kcLastAutoPull", 0)) > 5 * 60 * 1000) {
+    saveLocal("kcLastAutoPull", Date.now());
+    setTimeout(function () { kcPull({ silent: true }); }, 800);   // tarik cloud saat app dibuka — maks 1× per 5 menit
+  }
+  // service worker: buka ulang instan + tetap jalan offline (network-first, tanpa versi basi)
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    navigator.serviceWorker.register("sw.js").catch(function (e) { console.warn("sw:", e); });
+  }
   goto("dashboard");
 })();
