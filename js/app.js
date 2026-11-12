@@ -683,12 +683,13 @@
   function wikiUrl(host) {
     return host + "/w/api.php?action=query&format=json&origin=*&generator=random&grnnamespace=0&grnlimit=1&prop=extracts&explaintext=1";
   }
-  function readTrim(text) {
-    // buang bagian referensi & potong di batas paragraf ~3000 karakter
+  function readTrim(text, limit) {
+    limit = limit || 3000;
+    // buang bagian referensi & potong di batas paragraf
     var cutAt = text.search(/^(#{0,4}\s*)?(References?|External links?|See also|Notes?|Bibliography|Further reading|Gallery|Sources?|Footnotes?)\s*$/im);
     if (cutAt > 240) text = text.slice(0, cutAt);
-    if (text.length > 3000) {
-      var cut = text.slice(0, 3000);
+    if (text.length > limit) {
+      var cut = text.slice(0, limit);
       var lastP = cut.lastIndexOf("\n");
       var lastS = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"));
       text = cut.slice(0, (lastP > 400 ? lastP : lastS) + 1);
@@ -811,9 +812,12 @@
     $("#readPane").classList.remove("hidden");
     var words = countWords(readArticle.text);
     var tag = readArticle.src === "lib" ? "teks latihan • level " + readArticle.libLv
+      : readArticle.src === "amlit" ? "American Literature • cerita klasik"
+      : readArticle.src === "bbc" ? "BBC News"
       : readArticle.src === "nil" ? "News in Levels • tingkat " + readArticle.nilLevel
       : "Wikipedia";
     $("#readMeta").textContent = tag + " • " + words + " kata • ±" + Math.max(1, Math.round(words / 180)) + " menit";
+    $("#readBody").className = "read-body" + (readArticle.src === "amlit" ? " prose" : "");
     $("#readBody").innerHTML = readToHtml(readArticle.text) +
       (readArticle.disc ? '<p class="read-disc"><b>Wacana:</b> ' + esc(readArticle.disc) + "</p>" : "");
     $("#readBody").scrollTop = 0;
@@ -901,6 +905,114 @@
       $("#readStatus").textContent = "";
       if (triesLeft > 0 && String(e.message || e) === "terlalu pendek") { readFetchNil(levelKey, triesLeft - 1); return; }
       toast("Gagal mengambil berita (" + (e.message || e) + ") — coba lagi.");
+    });
+  }
+
+  // --- sumber: cerita klasik American Literature (halaman daftar diblokir CF → daftar kurasi) ---
+  var AM_STORIES = [
+    { u: "https://americanliterature.com/author/o-henry/short-story/the-gift-of-the-magi/", t: "The Gift of the Magi — O. Henry" },
+    { u: "https://americanliterature.com/author/kate-chopin/short-story/the-story-of-an-hour/", t: "The Story of an Hour — Kate Chopin" },
+    { u: "https://americanliterature.com/author/jack-london/short-story/to-build-a-fire/", t: "To Build a Fire — Jack London" },
+    { u: "https://americanliterature.com/author/edgar-allan-poe/short-story/the-tell-tale-heart/", t: "The Tell-Tale Heart — Edgar Allan Poe" },
+    { u: "https://americanliterature.com/author/edgar-allan-poe/short-story/the-cask-of-amontillado/", t: "The Cask of Amontillado — Edgar Allan Poe" },
+    { u: "https://americanliterature.com/author/anton-chekhov/short-story/the-bet/", t: "The Bet — Anton Chekhov" },
+    { u: "https://americanliterature.com/author/washington-irving/short-story/rip-van-winkle/", t: "Rip Van Winkle — Washington Irving" },
+    { u: "https://americanliterature.com/author/mark-twain/short-story/the-celebrated-jumping-frog-of-calaveras-county", t: "The Celebrated Jumping Frog — Mark Twain" },
+    { u: "https://americanliterature.com/author/w-w-jacobs/short-story/the-monkeys-paw", t: "The Monkey's Paw — W. W. Jacobs" },
+    { u: "https://americanliterature.com/author/guy-de-maupassant/short-story/the-necklace", t: "The Necklace — Guy de Maupassant" },
+    { u: "https://americanliterature.com/author/ambrose-bierce/short-story/an-occurrence-at-owl-creek-bridge", t: "An Occurrence at Owl Creek Bridge — Ambrose Bierce" },
+    { u: "https://americanliterature.com/author/langston-hughes/short-story/thank-you-mam", t: "Thank You, Ma'am — Langston Hughes" },
+    { u: "https://americanliterature.com/author/hans-christian-andersen/short-story/the-little-match-girl", t: "The Little Match Girl — H. C. Andersen" },
+    { u: "https://americanliterature.com/author/philip-k-dick/short-story/the-hanging-stranger", t: "The Hanging Stranger — Philip K. Dick" },
+    { u: "https://americanliterature.com/childrens-stories/little-red-riding-hood", t: "Little Red Riding Hood" },
+    { u: "https://americanliterature.com/childrens-stories/goldilocks-and-the-three-bears", t: "Goldilocks and the Three Bears" },
+    { u: "https://americanliterature.com/childrens-stories/jack-and-the-beanstalk", t: "Jack and the Beanstalk" },
+    { u: "https://americanliterature.com/author/the-brothers-grimm/fairy-tale/cinderella", t: "Cinderella — Brothers Grimm" }
+  ];
+  // potong blok non-cerita di akhir halaman
+  function amCut(body) {
+    var cut = body.search(/^#{0,4}\s*(Comments?|About the author|Related (stories|articles)?|More (from|stories|like this)|You may also like|Sign in|Leave a (comment|reply)|Share this|Read next|Editor('s)? picks?|Kids? corner|Read more stories)\s*$/im);
+    if (cut > 400) body = body.slice(0, cut);
+    return body;
+  }
+  function readFetchAmlit(triesLeft, urlOverride) {
+    var pick = null;
+    if (!urlOverride) {
+      var pool = AM_STORIES.slice(0);
+      var oldT = readArticle && readArticle.src === "amlit" ? readArticle.title : "";
+      if (pool.length > 1) {
+        var f = pool.filter(function (p) { return p.t !== oldT; });
+        if (f.length) pool = f;
+      }
+      pick = pool[Math.floor(Math.random() * pool.length)];
+    }
+    var url = urlOverride || pick.u;
+    $("#readStatus").textContent = "Mengambil cerita…";
+    $("#btnReadFetch").disabled = true;
+    jinaFetch(url).then(function (md) {
+      var title = pick ? pick.t : "Cerita";
+      var body = readTrim(amCut(mdToText(md)), 7000);
+      if (body.length < 500) throw new Error("terlalu pendek");
+      readArticle = { title: title, url: url, text: body, src: "amlit" };
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      save("readLast", readArticle);
+      renderReadArticle();
+      toast("Cerita klasik dimuat ✓ — nikmati bacasanya.");
+    }).catch(function (e) {
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      // 404 → coba sekali tanpa trailing slash
+      if (String(e.message || e) === "404" && /\/$/.test(url)) { readFetchAmlit(triesLeft, url.replace(/\/$/, "")); return; }
+      if (triesLeft > 0 && !urlOverride) { readFetchAmlit(triesLeft - 1); return; }
+      toast("Gagal mengambil cerita (" + (e.message || e) + ") — coba lagi.");
+    });
+  }
+
+  // --- sumber: BBC News — RSS umpan terkini → pilih artikel acak → ambil isi ---
+  function bbcExtract(md) {
+    var s = md.indexOf("Markdown Content:");
+    var b = s > -1 ? md.slice(s + 17) : md;
+    var cut = b.search(/^#{0,4}\s*(Related (topics|stories|articles)|More on this|Top stories|Explore (more)?|Read more|More stories|Sign in)\s*$/im);
+    if (cut > 200) b = b.slice(0, cut);
+    var out = [];
+    b.split("\n").forEach(function (l0) {
+      var l = l0.trim();
+      if (!l) { if (out.length && out[out.length - 1] !== "") out.push(""); return; }
+      if (/^!\[/.test(l)) return;                                   // gambar + caption
+      if (/^(Getty Images|Reuters|EPA|PA Media|Alamy|AP\/?|AFP|BBC\/?)\b/i.test(l)) return; // kredit foto
+      if (/^\d+ (hours?|minutes?|days?|weeks?) ago$/.test(l)) return; // waktu unggah
+      out.push(l);
+    });
+    return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  function readFetchBBC(triesLeft) {
+    $("#readStatus").textContent = "Mengambil berita BBC…";
+    $("#btnReadFetch").disabled = true;
+    jinaFetch("https://feeds.bbci.co.uk/news/rss.xml").then(function (md) {
+      var links = [];
+      md.split("\n").forEach(function (l) {
+        var m = l.match(/https:\/\/www\.bbc\.co\.uk\/news\/articles\/[a-z0-9]+/i);
+        if (m && links.indexOf(m[0]) === -1) links.push(m[0]);
+      });
+      if (!links.length) throw new Error("daftar kosong");
+      var pick = links[Math.floor(Math.random() * links.length)];
+      return jinaFetch(pick).then(function (art) {
+        var mt = art.match(/^Title:\s*(.+)$/m);
+        var body = readTrim(bbcExtract(art), 5000);
+        if (body.length < 500) throw new Error("terlalu pendek");
+        readArticle = { title: mt ? mt[1].trim() : "Berita BBC", url: pick, text: body, src: "bbc" };
+        $("#btnReadFetch").disabled = false;
+        $("#readStatus").textContent = "";
+        save("readLast", readArticle);
+        renderReadArticle();
+        toast("Berita BBC dimuat ✓");
+      });
+    }).catch(function (e) {
+      $("#btnReadFetch").disabled = false;
+      $("#readStatus").textContent = "";
+      if (triesLeft > 0) { readFetchBBC(triesLeft - 1); return; }
+      toast("Gagal mengambil berita BBC (" + (e.message || e) + ") — coba lagi.");
     });
   }
 
@@ -1022,18 +1134,25 @@
   function syncReadSrc(v) {
     $("#readUrl").classList.toggle("hidden", v !== "custom");
     $("#readLibLevel").classList.toggle("hidden", !(v === "lib" || v === "nil"));
-    $("#btnReadFetch").textContent = v === "custom" ? "Baca artikel ↗" : v === "lib" ? "↻ Latihan baru" : v === "nil" ? "↻ Berita baru" : "↻ Ambil bacaan";
+    $("#btnReadFetch").textContent = v === "custom" ? "Baca artikel ↗"
+      : v === "lib" ? "↻ Latihan baru"
+      : v === "amlit" ? "↻ Cerita lain"
+      : v === "nil" || v === "bbc" ? "↻ Berita baru"
+      : "↻ Ambil bacaan";
   }
   $("#readSrcSel").addEventListener("change", function () { syncReadSrc(this.value); });
   $("#btnReadFetch").addEventListener("click", function () {
     var v = $("#readSrcSel").value;
     if (v === "custom") readFetchCustom($("#readUrl").value);
     else if (v === "lib") readFetchLib($("#readLibLevel").value, false);
+    else if (v === "amlit") readFetchAmlit(3);
     else if (v === "nil") readFetchNil($("#readLibLevel").value, 3);
+    else if (v === "bbc") readFetchBBC(3);
     else readFetchWiki(v);
   });
   $("#btnReadNewQs").addEventListener("click", function () {
     if (readArticle && readArticle.src === "lib") readFetchLib($("#readLibLevel").value, true);  // passage baru
+    else if (readArticle && readArticle.src === "amlit") readFetchAmlit(3);                       // cerita baru
     else if (readArticle) buildReadQuiz();                                                        // soal cloze baru
   });
   $("#btnReadToNotes").addEventListener("click", function () {

@@ -351,3 +351,8 @@ textarea{ min-height:110px; }
 .read-body ul.read-ul{ margin:0 0 14px; padding-left:20px; }
 .read-body ul.read-ul li{ margin:0 0 4px; }
 .read-disc{ background:var(--green-soft); border-left:3px solid var(--green); padding:8px 12px; border-radius:8px; font-size:14px; margin-top:14px; }
+
+/* ---------- mode baca fiksi (cerita klasik) ---------- */
+.read-body.prose{ font-size:16.5px; line-height:1.85; font-family:Georgia,'Times New Roman',serif; }
+.read-body.prose p{ margin:0 0 16px; max-width:75ch; }
+.read-body.prose .read-h{ font-family:inherit; font-size:17px; }
