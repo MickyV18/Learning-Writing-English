@@ -32,12 +32,12 @@ English-Writing-Trainer/
 ## Halaman
 | Halaman | Isi |
 |---|---|
-| **Dashboard** | Sapaan, 5 statistik, kalender streak 5 minggu, checklist harian (4 metode) |
-| **Journaling** | 12 prompt acak, autosave draft, target kata terukur, riwayat + pencarian |
+| **Dashboard** | Sapaan, 5 statistik, kalender streak 5 minggu, checklist harian (3 metode) |
+| **Journaling** | **62 topik writing** (9 jenis: Opini, Argumentasi, Naratif, Deskripsi, Proses, Surat & Email, Berita & Laporan, Ulasan, Situasi — level A2–C1) + filter jenis/level + **topik langsung dari web** (*Breaking News English* — pelajaran ESL 7 level dengan tugas & bahan bacaan; *BBC News* — ringkasan + pendapat) + **penilaian tulisan 0-100** (6 dimensi: isi & relevansi, struktur & koherensi, kosakata, grammar, variasi kalimat & gaya, mekanik) + rencana menulis per tugas; autosave draft, target kata terukur, riwayat + pencarian |
 | **Copywork** | 8 teks bawaan (opini/naratif/ekspositori/persuasif/dsl.) + teks sendiri; 2 mode: **Copy** (teks terlihat) dan **Recall** (teks mengabur, ketik dari ingatan); diff per kata berbasis LCS |
 | **Reading** | **Bacaan online**: ① teks latihan bawaan bergaya tes reading ESL level A2–B2 (10 passage + soal pemahaman asli, bisa offline), ② cerita klasik *American Literature* (18 cerita pilihan: O. Henry, Poe, London, dll.), ③ berita bertingkat *News in Levels*, ④ berita dunia *BBC News* (dari RSS terkini), ⑤ artikel acak Wikipedia, ⑥ link artikel sendiri via r.jina.ai — kuis pemahaman 8 soal per bacaan dengan 5 jenis latihan (pemahaman asli, kosakata cloze, grammar/kata fungsi, detail angka, kalimat dalam teks) + pertanyaan wacana; mode baca fiksi serif utk cerita; sidebar bisa diminimize. Catatan: sumber + catatan struktur & kolokasi (tetap jalan offline) |
 | **Cycle** | Draft → Correct → Rewrite, dengan perbandingan otomatis + checklist 4 langkah. Draft step-1 bisa langsung dikirim Checker |
-| **Koreksi** (baru) | Checker grammar dengan 2 mesin: **offline ±50 aturan ESL** (agreement, article, preposisi, tense, double negative, spelling, tanda baca, kapitalisasi) + **online LanguageTool** ( gratis, tanpa API key). Saran per-saran bisa diterapkan, atau sekaligus dengan cascade otomatis; hasil bisa dikirim ke Cycle langkah 2 |
+| **Koreksi** (baru) | Checker grammar dengan 2 mesin: **offline ±50 aturan ESL** (agreement, article, preposisi, tense, double negative, spelling, tanda baca, kapitalisasi) + **online LanguageTool** ( gratis, tanpa API key). Saran per-saran bisa diterapkan, atau sekaligus dengan cascade otomatis; hasil bisa dikirim ke Cycle langkah 2. Dilengkapi **penilaian 0-100** yang sama seperti di Journaling |
 | **Error Log** | Kategori kesalahan, statistik pola (bar), pencarian, export JSON |
 | **Rencana** | Jadwal latihan mingguan + prinsip agar progres nyata |
 | **Akun** (baru) | Login Google + sinkronisasi cloud (Firebase Auth & Firestore) — journal, cycle, error log, reading, streak, dan pengaturan mengikuti akun di semua perangkat |

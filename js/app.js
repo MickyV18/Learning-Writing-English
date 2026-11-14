@@ -208,30 +208,227 @@
   }
 
   /* ---------------- journal ---------------- */
-  var PROMPTS = [
-    ["Opini", "Do you think students should be allowed to use AI tools for homework? Give two reasons."],
-    ["Keseharian", "Describe your day so far in 8–10 sentences. What happened, and how did you feel?"],
-    ["Naratif", "Write about a small mistake you made that taught you something useful."],
-    ["Perbandingan", "Compare studying alone and studying in a group. Which suits you better, and why?"],
-    ["Deskripsi", "Describe the room you are in right now using as many senses as possible."],
-    ["Masa depan", "What skill do you want to master in the next two years, and what is your plan?"],
-    ["Eksplanasi", "Explain a hobby or routine of yours to someone who has never heard of it."],
-    ["Argumen", "Some people say social media does more harm than good. What is your position?"],
-    ["Refleksi", "What is one thing you did well this week, and one thing you want to fix next week?"],
-    ["Hipotetis", "If you could instantly master one language skill (speaking, writing, listening), which one would you choose, and why?"],
-    ["Teknologi", "Should smartphones be banned in classrooms? Argue your case in one paragraph."],
-    ["Cerita", "Retell a movie or story you enjoyed recently — its plot, and why it worked (or did not)."]
-  ];
+  var PROMPTS = (window.EWTWriting && window.EWTWriting.prompts) ? window.EWTWriting.prompts : [];
+  var writePrompt = null;                       // topik aktif {q,g,lv,sk,min,guide,src,ctx,url}
   var promptIdx = load("promptIdx", -1);
-  function setPrompt() {
-    var i;
-    do { i = Math.floor(Math.random() * PROMPTS.length); } while (i === promptIdx && PROMPTS.length > 1);
-    promptIdx = i; save("promptIdx", i);
-    $("#promptTag").textContent = PROMPTS[i][0];
-    $("#promptText").textContent = PROMPTS[i][1];
+  var promptGenre = load("promptGenre", "all");
+  var promptLevel = load("promptLevel", "all");
+
+  function promptPool() {
+    // coba kombinasi paling ketat dulu, lalu longgarkan satu per satu
+    var byGenre = PROMPTS.filter(function (p) { return promptGenre === "all" || p.g === promptGenre; });
+    var byLevel = PROMPTS.filter(function (p) { return promptLevel === "all" || p.lv === promptLevel; });
+    var both = byGenre.filter(function (p) { return promptLevel === "all" || p.lv === promptLevel; });
+    if (both.length) return both;
+    if (byGenre.length) return byGenre;
+    if (byLevel.length) return byLevel;
+    return PROMPTS;
   }
+  function applyPrompt(p) {
+    if (!p) return;
+    writePrompt = p;
+    $("#promptTag").textContent = p.g;
+    $("#promptLv").textContent = p.lv || "";
+    $("#promptSkill").textContent = p.sk || "";
+    $("#promptText").textContent = p.q;
+    var gEl = $("#promptGuide");
+    if (p.guide) { gEl.textContent = "📐 " + String(p.guide).replace(/->/g, "→"); gEl.classList.remove("hidden"); }
+    else gEl.classList.add("hidden");
+    var cEl = $("#promptCtx");
+    if (p.ctx) {
+      cEl.innerHTML = '<div class="ctx-head">Bahan bacaan' +
+        (p.url ? ' — <a href="' + esc(p.url) + '" target="_blank" rel="noopener">buka sumber ↗</a>' : "") +
+        '</div><div class="ctx-body">' + esc(p.ctx) + "</div>";
+      cEl.classList.remove("hidden");
+    } else cEl.classList.add("hidden");
+    $("#promptMeta").textContent = "Target ±" + (p.min || 120) + " kata" + (p.src ? " • sumber: " + p.src : "");
+    $("#promptStatus").textContent = "";
+    var i = PROMPTS.indexOf(p);
+    if (i > -1) { promptIdx = i; save("promptIdx", i); }
+    renderScorePanel();
+  }
+  function setPrompt() {
+    var pool = promptPool();
+    var prev = writePrompt ? writePrompt.q : "";
+    var cand = pool.filter(function (p) { return p.q !== prev; });
+    if (!cand.length) cand = pool;
+    applyPrompt(cand[Math.floor(Math.random() * cand.length)]);
+  }
+  function fillPromptFilters() {
+    var gs = ["all"], ls = ["all", "A2", "B1", "B2", "C1"], o;
+    PROMPTS.forEach(function (p) { if (gs.indexOf(p.g) === -1) gs.push(p.g); });
+    var selG = $("#promptGenre"), selL = $("#promptLevel");
+    gs.forEach(function (g) { o = document.createElement("option"); o.value = g; o.textContent = g === "all" ? "Semua jenis" : g; selG.appendChild(o); });
+    ls.forEach(function (l) { o = document.createElement("option"); o.value = l; o.textContent = l === "all" ? "Semua level" : l; selL.appendChild(o); });
+    selG.value = promptGenre; selL.value = promptLevel;
+    selG.addEventListener("change", function () { promptGenre = this.value; save("promptGenre", promptGenre); setPrompt(); });
+    selL.addEventListener("change", function () { promptLevel = this.value; save("promptLevel", promptLevel); setPrompt(); });
+  }
+  fillPromptFilters();
   $("#btnPrompt").addEventListener("click", setPrompt);
   setPrompt();
+
+  /* ---------------- topik writing dari web ---------------- */
+  var BNE_CEFR = { "0": "A1", "1": "A2", "2": "A2", "3": "B1", "4": "B1", "5": "B2", "6": "C1" };
+  var BNE_BY_CEFR = { A2: ["1", "2"], B1: ["3", "4"], B2: ["5", "6"], C1: ["6"], A1: ["0", "1"] };
+
+  function bneSection(md, headingRe) {
+    var lines = String(md).split("\n"), i = -1, out = [], k;
+    for (k = 0; k < lines.length; k++) { if (headingRe.test(lines[k])) { i = k; break; } }
+    if (i < 0) return "";
+    for (k = i + 1; k < lines.length; k++) {
+      if (/^#{1,6}\s/.test(lines[k])) break;
+      out.push(lines[k]);
+    }
+    return out.join("\n").trim();
+  }
+  function bneFirstLine(txt) {
+    var ls = String(txt).split("\n").map(function (l) { return l.trim(); })
+      .filter(function (l) { return l.length > 8 && !/^_+$/.test(l); });
+    return ls.length ? ls[0].replace(/\*\*/g, "") : "";
+  }
+  function webPromptBNE() {
+    $("#promptStatus").textContent = "Mengambil daftar pelajaran dari Breaking News English…";
+    return jinaFetch("https://breakingnewsenglish.com/").then(function (md) {
+      var lessons = [], cur = null;
+      md.split("\n").forEach(function (line) {
+        var m = line.match(/^\s*(?:#{1,6}\s*)?\[([^\]]{8,170})\]\((https:\/\/breakingnewsenglish\.com\/\d+\/[a-z0-9-]+\.html)(?:\s+"[^"]*")?\)/i);
+        if (m && !/^Level\s/i.test(m[1])) {
+          cur = { title: m[1].trim(), url: m[2], levels: {} };
+          lessons.push(cur);
+          return;
+        }
+        var lm = line.match(/^\s*(?:#{1,6}\s*)?[*\-]?\s*\[Level\s(\d)\]\((https:\/\/[^)\s]+?\.html)\)/i);
+        if (lm && cur) cur.levels[lm[1]] = lm[2];
+      });
+      lessons = lessons.filter(function (l) { return l.title && l.url; });
+      if (!lessons.length) throw new Error("daftar pelajaran kosong");
+      // pilih pelajaran yang punya level sesuai filter CEFR user
+      var want = BNE_BY_CEFR[promptLevel] || BNE_BY_CEFR["B1"];
+      var pool = lessons.filter(function (l) {
+        return want.some(function (lv) { return l.levels[lv]; });
+      });
+      if (!pool.length) pool = lessons;
+      var les = pool[Math.floor(Math.random() * pool.length)];
+      var lv = want.filter(function (x) { return les.levels[x]; })[0] || "3";
+      var url = les.levels[lv] || les.url;
+      $("#promptStatus").textContent = "Mengambil materi: " + les.title + "…";
+      return jinaFetch(url).then(function (page) {
+        var head = "";
+        page.split("\n").forEach(function (l) {
+          var m = l.match(/^###\s+(.+?)\s*\(([^)]*)\)\s*$/);
+          if (m && !head && /\d{4}/.test(m[2]) && m[1].indexOf("[") === -1) head = m[1].trim();
+        });
+        var reading = mdToText(bneSection(page, /^###\s*The Reading/i)).replace(/\s+/g, " ").trim();
+        var task = bneFirstLine(bneSection(page, /^###\s*Academic writing/i));
+        if (!task) task = bneFirstLine(bneSection(page, /^###\s*Free writing/i));
+        if (!task) {
+          var disc = bneSection(page, /^###\s*Discussion/i).split("\n").map(function (l) { return l.trim(); })
+            .filter(function (l) {
+              return l.length > 15 && l.indexOf("___") === -1 &&
+                !/STUDENT|Do not show|^\d+\.|^Q\d/i.test(l);
+            }).slice(0, 2);
+          if (disc.length) task = "Answer these questions about the article: " + disc.join("  ");
+        }
+        if (!task) task = "Write a short essay about the article below. Give your opinion and two reasons.";
+        if (head && /this topic/i.test(task)) task = task.replace(/this topic/gi, head);
+        applyPrompt({
+          g: "Web • Berita", lv: BNE_CEFR[lv] || "B1",
+          sk: "Tugas dari Breaking News English",
+          q: task, min: 120,
+          guide: "Baca bahan di bawah, lalu tulis jawabanmu. Struktur: thesis -> alasan + contoh -> penutup.",
+          src: "Breaking News English • Level " + lv + (head ? " • " + head : ""),
+          ctx: (head ? head + ". " : "") + reading.slice(0, 900), url: url
+        });
+        toast("Topik dari Breaking News English dimuat ✓");
+      });
+    }).catch(function (e) {
+      $("#promptStatus").textContent = "";
+      toast("Gagal mengambil topik (" + (e.message || e) + ") — pakai prompt bawaan saja ya.");
+    });
+  }
+  function webPromptBBC() {
+    $("#promptStatus").textContent = "Mengambil berita terkini dari BBC…";
+    return jinaFetch("https://feeds.bbci.co.uk/news/rss.xml").then(function (md) {
+      var links = [];
+      md.split("\n").forEach(function (l) {
+        var m = l.match(/https:\/\/www\.bbc\.co\.uk\/news\/articles\/[a-z0-9]+/i);
+        if (m && links.indexOf(m[0]) === -1) links.push(m[0]);
+      });
+      if (!links.length) throw new Error("tidak ada artikel");
+      var pick = links[Math.floor(Math.random() * links.length)];
+      $("#promptStatus").textContent = "Mengambil isi artikel…";
+      return jinaFetch(pick).then(function (art) {
+        var mt = art.match(/^Title:\s*(.+)$/m);
+        var body = mdToText(art).replace(/\s+/g, " ").trim();
+        applyPrompt({
+          g: "Web • Berita", lv: "B1",
+          sk: "Ringkasan & pendapat berita",
+          q: "Read the news story below. Write a summary of about 100 words, then add your own opinion in a second paragraph (one reason + one example).",
+          min: 140,
+          guide: "Paragraf 1: ringkasan (fakta utama saja, tanpa mengulang kalimat asli). Paragraf 2: pendapatmu + alasan + contoh.",
+          src: "BBC News" + (mt ? " • " + mt[1].trim() : ""),
+          ctx: body.slice(0, 900), url: pick
+        });
+        toast("Berita BBC dimuat ✓");
+      });
+    }).catch(function (e) {
+      $("#promptStatus").textContent = "";
+      toast("Gagal mengambil berita (" + (e.message || e) + ") — pakai prompt bawaan saja ya.");
+    });
+  }
+  $("#btnPromptWeb").addEventListener("click", function () {
+    var src = $("#promptWebSrc").value;
+    var btn = this;
+    btn.disabled = true; btn.textContent = "Mengambil…";
+    var done = function () { btn.disabled = false; btn.textContent = "🌐 Ambil dari web"; };
+    if (src === "bbc") webPromptBBC().then(done, done);
+    else webPromptBNE().then(done, done);
+  });
+
+  /* ---------------- penilaian tulisan 0-100 ---------------- */
+  function scoreHtml(res) {
+    var h = '<div class="score-head">' +
+      '<div class="score-num">' + res.total + '<span>/100</span></div>' +
+      '<div><div class="score-band">' + esc(res.band) + '</div>' +
+      '<div class="meta">Estimasi CEFR: <b>' + esc(res.cefr) + '</b> • ' + res.stats.words + " kata • " +
+      res.stats.paras + " paragraf • " + res.stats.sentences + " kalimat</div></div></div>";
+    h += '<div class="score-dims">';
+    res.dims.forEach(function (d) {
+      var pct = Math.round(d.score / d.max * 100);
+      var cls = pct >= 75 ? "good" : pct >= 50 ? "mid" : "low";
+      h += '<div class="score-dim"><span class="sd-lbl">' + esc(d.label) + '</span>' +
+        '<span class="sd-bar"><span class="sd-fill ' + cls + '" style="width:' + pct + '%"></span></span>' +
+        '<span class="sd-val">' + d.score + "/" + d.max + '</span>' +
+        '<span class="sd-note">' + esc(d.note) + "</span></div>";
+    });
+    h += "</div>";
+    if (res.tips.length) {
+      h += '<div class="score-tips"><b>Yang perlu diperbaiki:</b><ul>';
+      res.tips.forEach(function (t) { h += "<li>" + esc(t) + "</li>"; });
+      h += "</ul></div>";
+    }
+    return h;
+  }
+  function renderScorePanel() {
+    var el = $("#jScore");
+    if (!el || !window.EWTWriting) return;
+    var text = ($("#jText").value || "");
+    if (!text.trim()) { el.classList.add("hidden"); return; }
+    var res = window.EWTWriting.score(text, {
+      prompt: writePrompt ? writePrompt.q : "",
+      issues: jChecked ? jIssues : undefined,
+      issuesSource: jLastWasLT ? "lt" : "local",
+      target: writePrompt ? (writePrompt.min || 120) : 120
+    });
+    el.innerHTML = scoreHtml(res);
+    el.classList.remove("hidden");
+  }
+  $("#btnJScore").addEventListener("click", function () {
+    if (!($("#jText").value || "").trim()) { toast("Tulis dulu teksnya 🙂"); return; }
+    renderScorePanel();
+    toast("Penilaian 0-100 selesai");
+  });
 
   var jText = $("#jText");
   function jRenderDraftFlag() {
@@ -257,7 +454,12 @@
     var txt = jText.value.trim();
     if (!txt) { toast("Tulis sesuatu dulu 🙂"); return; }
     var list = load("journal", []);
-    list.unshift({ id: uid(), date: todayISO(), topic: PROMPTS[promptIdx][0], prompt: PROMPTS[promptIdx][1], words: countWords(txt), text: txt });
+    list.unshift({
+      id: uid(), date: todayISO(),
+      topic: writePrompt ? writePrompt.g : "",
+      prompt: writePrompt ? writePrompt.q : "",
+      words: countWords(txt), text: txt
+    });
     save("journal", list);
     jText.value = ""; save("draftJournal", "");
     jCount(); jRenderDraftFlag(); jClearIssues();
@@ -353,6 +555,7 @@
     jChecked = true;
     jIssues = collectLocalIssues(jText.value);
     renderJIssues();
+    renderScorePanel();
   }
 
   function jRunLTCheck() {
@@ -366,6 +569,7 @@
       jIssues = issues;
       jLastWasLT = true;
       renderJIssues();
+      renderScorePanel();
       btn.disabled = false; btn.textContent = "Periksa online";
       if (!jIssues.length) toast("LanguageTool tidak menemukan masalah 🎉");
     }).catch(function () {
@@ -385,6 +589,7 @@
   function jRecheckLocal() {
     jIssues = collectLocalIssues(jText.value);
     renderJIssues();
+    renderScorePanel();
   }
 
   $("#btnJCheckLocal").addEventListener("click", jRunLocalCheck);
@@ -1429,6 +1634,27 @@
   var corrOrigin = "none";          // "cycle" | "journal" | "none"
   var corrIssues = [];              // {start,end,wrong,fix,msg,src,stale}
   var corrLastWasLT = false;
+  var corrChecked = false;
+
+  /* penilaian 0-100 untuk teks di halaman Koreksi */
+  function renderCorrScore() {
+    var el = $("#corrScore");
+    if (!el || !window.EWTWriting) return;
+    var text = corrText.value || "";
+    if (!text.trim()) { el.classList.add("hidden"); return; }
+    var res = window.EWTWriting.score(text, {
+      issues: corrChecked ? corrIssues : undefined,
+      issuesSource: corrLastWasLT ? "lt" : "local",
+      target: 120
+    });
+    el.innerHTML = scoreHtml(res);
+    el.classList.remove("hidden");
+  }
+  $("#btnCorrScore").addEventListener("click", function () {
+    if (!(corrText.value || "").trim()) { toast("Tempel atau tulis teks dulu."); return; }
+    renderCorrScore();
+    toast("Penilaian 0-100 selesai");
+  });
 
   function keepCase(orig, repl) {
     if (orig.length > 2 && orig === orig.toUpperCase()) return repl.toUpperCase();
@@ -1576,6 +1802,7 @@
           wrong: text.substr(x.offset, x.length),
           fix: x.replacements && x.replacements[0] ? x.replacements[0].value : "",
           msg: x.message + (x.rule && x.rule.id ? " [" + x.rule.id + "]" : ""),
+          cat: (x.rule && x.rule.category && x.rule.category.id) || "",
           src: "lt", stale: false
         };
       });
@@ -1585,8 +1812,10 @@
   function runLocalCheck() {
     var text = corrText.value;
     corrLastWasLT = false;
+    corrChecked = true;
     corrIssues = collectLocalIssues(text);
     renderCorrIssues(text);
+    renderCorrScore();
   }
 
   function runLTCheck() {
@@ -1596,9 +1825,11 @@
     btn.disabled = true; btn.textContent = "Memeriksa…";
     $("#corrSummary").textContent = "Menghubungi LanguageTool…";
     fetchLTIssues(raw).then(function (issues) {
+      corrChecked = true;
       corrIssues = issues;
       corrLastWasLT = true;
       renderCorrIssues(raw);
+      renderCorrScore();
       btn.disabled = false; btn.textContent = "Periksa online";
       if (!corrIssues.length) toast("LanguageTool tidak menemukan masalah 🎉");
     }).catch(function () {
@@ -1940,8 +2171,7 @@
     $("#setName").value = settings.name || "";
     $("#setGoal").value = settings.goal || 150;
     themeSegRender();
-    $("#promptTag").textContent = PROMPTS[promptIdx][0];
-    $("#promptText").textContent = PROMPTS[promptIdx][1];
+    if (PROMPTS[promptIdx]) applyPrompt(PROMPTS[promptIdx]); else setPrompt();
     jCount(); jRenderDraftFlag();
     renderJournalList(); renderTarget(); showBest();
     renderReadingList(); renderCycleList(); renderErrStats(); renderErrList();

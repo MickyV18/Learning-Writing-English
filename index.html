@@ -130,21 +130,41 @@
         <h2>Tulis entri hari ini</h2>
         <p class="sub">Tulis 100–200 kata secara rutin. Draf akan tersimpan otomatis saat kamu mengetik.</p>
         <div class="prompt-box">
-          <div class="row">
+          <div class="row wrap gap8">
             <span class="tag" id="promptTag">Opini</span>
-            <button class="btn ghost sm" id="btnPrompt" type="button">↻ Prompt lain</button>
+            <span class="tag lv" id="promptLv">B1</span>
+            <span class="meta" id="promptSkill"></span>
           </div>
           <p class="prompt-text" id="promptText"></p>
+          <div class="prompt-guide hidden" id="promptGuide"></div>
+          <div class="prompt-ctx hidden" id="promptCtx"></div>
+          <div class="row wrap gap8 mt8">
+            <select id="promptGenre" class="input sm" style="max-width:170px;" aria-label="Jenis tugas"></select>
+            <select id="promptLevel" class="input sm" style="max-width:140px;" aria-label="Level"></select>
+            <button class="btn ghost sm" id="btnPrompt" type="button">↻ Prompt lain</button>
+            <select id="promptWebSrc" class="input sm" style="max-width:220px;" aria-label="Sumber topik web">
+              <option value="bne">Topik: Breaking News English</option>
+              <option value="bbc">Topik: Berita BBC</option>
+            </select>
+            <button class="btn ghost sm" id="btnPromptWeb" type="button">🌐 Ambil dari web</button>
+            <a class="btn ghost sm" href="https://writeandimprove.com/" target="_blank" rel="noopener"
+              title="Latihan Cambridge Write & Improve (buka di tab baru)">Write &amp; Improve ↗</a>
+          </div>
+          <div class="meta mt8" id="promptMeta"></div>
+          <div class="meta" id="promptStatus"></div>
         </div>
         <textarea id="jText" class="textarea" rows="9"
           placeholder="Write your entry in English here..."></textarea>
 
-        <div class="row gap8 mt8">
+        <div class="row gap8 mt8 wrap">
           <button class="btn ghost sm" id="btnJCheckLocal" type="button">Periksa offline</button>
           <button class="btn ghost sm" id="btnJCheckOnline" type="button"
             title="Perlu internet — teks dikirim ke server publik LanguageTool">Periksa online</button>
+          <button class="btn primary sm" id="btnJScore" type="button"
+            title="Penilaian keseluruhan 0-100: isi, struktur, kosakata, grammar, gaya, mekanik">📊 Nilai tulisan (0-100)</button>
           <span class="meta" id="jCheckSummary"></span>
         </div>
+        <div id="jScore" class="score-box hidden"></div>
         <div id="jIssues" class="stack mt8"></div>
         <div class="row end hidden" id="jTools">
           <button class="btn primary sm" id="btnJApplyAll" type="button">✓ Terapkan semua perbaikan</button>
@@ -346,7 +366,11 @@
           <button class="btn ghost" id="btnCorrCopy" type="button">Salin teks</button>
           <button class="btn ghost" id="btnCheckLocal" type="button">Periksa offline</button>
           <button class="btn primary" id="btnCheckOnline" type="button">Periksa online</button>
+          <button class="btn primary" id="btnCorrScore" type="button"
+            title="Penilaian keseluruhan 0-100: isi, struktur, kosakata, grammar, gaya, mekanik">📊 Nilai (0-100)</button>
         </div>
+
+        <div id="corrScore" class="score-box hidden mt8"></div>
 
         <div class="row end mt8 hidden" id="corrTools">
           <button class="btn ghost sm" id="btnToCycle" type="button">Kirim ke Cycle langkah 2 →</button>
@@ -545,6 +569,7 @@
 </div>
 
 <script src="js/firebase-config.js"></script>
+<script src="js/writing.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
