@@ -246,6 +246,30 @@ textarea{ min-height:110px; }
   border-radius:9px; padding:9px 12px;
 }
 .v-wrong{ margin:8px 0 0 18px; font-size:13px; display:flex; flex-direction:column; gap:4px; }
+/* alur latihan 5 kata */
+.v-learn{
+  border:1px solid var(--border); border-radius:12px; background:var(--surface-2);
+  padding:12px 14px; margin-top:10px;
+}
+.v-learn .v-word{ font-size:18px; }
+.v-learn .v-id{ font-size:14px; margin:6px 0 2px; }
+.v-learn .v-ex{ font-size:13px; line-height:1.6; margin:6px 0; }
+.v-learn .v-ex.v-id{ color:var(--muted); font-size:12.5px; }
+.v-learn .v-meta{ font-size:12px; color:var(--muted); margin-top:3px; }
+.v-test{
+  border:1px solid var(--border); border-radius:12px; background:var(--surface-2);
+  padding:16px 18px; margin-top:10px;
+}
+.v-test-word{ font-size:26px; font-weight:700; display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; }
+.v-test .v-ex{ font-size:13.5px; color:var(--muted); margin:8px 0 12px; }
+.v-feed{
+  margin-top:12px; border-radius:10px; padding:11px 14px; font-size:13.5px;
+  border:1px solid var(--border); background:var(--surface);
+}
+.v-feed.ok{ border-color:var(--green); color:var(--green); }
+.v-feed.bad{ border-color:var(--red); color:var(--red); }
+.v-feed-arti{ margin-top:6px; color:var(--text); }
+.v-feed-arti .v-ex.v-id{ color:var(--muted); font-size:12.5px; margin-top:4px; }
 
 /* ---------- penilaian tulisan 0-100 ---------- */
 .score-box{

@@ -32,7 +32,7 @@
       coll: ["resilient economy", "remain resilient", "emotionally resilient"],
       root: "Latin resilire = “melompat kembali” (kembali ke bentuk semula)" },
     { w: "pragmatic", ipa: "/præɡˈmætɪk/", pos: "adjective", lv: "C1", th: "Karakter",
-      id: "pragmatis, solusi nyata bukan ideal",
+      id: "pragmatis, praktis, solusi nyata bukan ideal",
       ex: "Rather than argue about ideals, the team took a pragmatic approach and fixed the simplest problem first.",
       exId: "Alih-alih berdebat soal ideal, tim itu mengambil pendekatan pragmatis dan memperbaiki masalah paling sederhana dulu.",
       syn: ["practical", "realistic"], ant: ["idealistic", "theoretical"],
@@ -162,7 +162,7 @@
 
     /* ---------------- Kerja & karier ---------------- */
     { w: "deadline", ipa: "/ˈdedlaɪn/", pos: "noun", lv: "A2", th: "Kerja",
-      id: "tenggat waktu",
+      id: "tenggat waktu, batas akhir",
       ex: "The deadline was Friday, but half the team was still waiting for data.",
       exId: "Tenggatnya hari Jumat, tapi separuh tim masih menunggu data.",
       syn: ["cut-off date", "due date"], ant: ["extension", "postponement"],
@@ -777,10 +777,67 @@
     return Promise.all(tasks).then(function () { return out; });
   }
 
+  /* ---------- penilaian jawaban ketik-makna ----------
+     Aturan: jawaban benar bila memuat frasa arti (substring), atau
+     memuat minimal 2 kata inti arti, atau mayoritas kata inti dari satu
+     frasa arti, atau 1 kata inti yang cukup khas (>= 6 huruf).
+     Kata generik (negeri, tempat, akhir, ...) tidak dihitung agar
+     "dalam negeri" tidak dianggap arti dari "abroad". */
+  var STOP_ID = ["yang", "dengan", "untuk", "pada", "dari", "dalam", "tidak", "akan", "bisa",
+    "adalah", "atau", "juga", "sangat", "agar", "supaya", "karena", "sebab", "jika",
+    "kalau", "bila", "saat", "waktu", "setelah", "sebelum", "selama", "antara", "tentang",
+    "mengenai", "bagi", "oleh", "secara", "tanpa", "sampai", "hingga", "demi", "merupakan",
+    "memiliki", "adalah", "ialah", "yaitu", "yakni", "lain", "satu", "dua", "para"];
+  var GENERIC_ID = ["negeri", "tempat", "orang", "waktu", "hal", "cara", "jenis",
+    "sesuatu", "perasaan", "bagian", "benda", "masalah", "guna", "maksud", "hasil",
+    "proses", "keadaan", "titik", "arah", "awal", "akhir"];
+
+  function vNorm(s) {
+    return String(s || "").toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  }
+  function vParts(item) {
+    var out = [];
+    String(item.id || "").split(/[,;\/]+/).forEach(function (p) {
+      p = vNorm(p); if (p) out.push(p);
+    });
+    (item.syn || []).forEach(function (s) { s = vNorm(s); if (s) out.push(s); });
+    return out;
+  }
+  function vKeywords(item) { return vParts(item); }
+  function vTokens(k) {
+    return k.split(" ").filter(function (t) {
+      return t.length >= 4 && STOP_ID.indexOf(t) === -1 && GENERIC_ID.indexOf(t) === -1;
+    });
+  }
+  function gradeMeaning(item, typed) {
+    var t = vNorm(typed);
+    if (!t) return { ok: false, matched: "" };
+    var toks = t.split(" ");
+    var parts = vParts(item), i, p, hits;
+    var bestN = 0, bestRatio = 0, bestWord = "";
+    for (i = 0; i < parts.length; i++) {
+      p = parts[i];
+      if (p.length >= 4 && t.indexOf(p) > -1) return { ok: true, matched: p };
+      var pt = vTokens(p);
+      hits = pt.filter(function (w) { return toks.indexOf(w) > -1; });
+      if (!hits.length) continue;
+      var ratio = hits.length / (pt.length || 1);
+      if (hits.length > bestN) { bestN = hits.length; bestWord = hits[0]; }
+      if (ratio > bestRatio) bestRatio = ratio;
+    }
+    if (bestN >= 2) return { ok: true, matched: bestWord };
+    if (bestN >= 1 && bestRatio >= 0.5) return { ok: true, matched: bestWord };
+    if (bestN === 1 && bestWord.length >= 6) return { ok: true, matched: bestWord };
+    return { ok: false, matched: "" };
+  }
+
   window.EWTVocab = {
     words: VOCAB,
     buildPractice: buildPractice,
     lookupWord: lookupWord,
-    shuffle: shuffle
+    shuffle: shuffle,
+    gradeMeaning: gradeMeaning,
+    keywords: vKeywords
   };
 })();

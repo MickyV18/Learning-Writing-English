@@ -626,7 +626,6 @@
   var VOCAB = (window.EWTVocab && window.EWTVocab.words) ? window.EWTVocab.words : [];
   var vTheme = load("vTheme", "all");
   var vLevel = load("vLevel", "all");
-  var vQuestions = [], vDone = 0, vCorrect = 0, vWrong = [];
 
   /* ---------- daftar kosakata ---------- */
   function vFiltered() {
@@ -672,104 +671,194 @@
     if (head) head.parentElement.classList.toggle("open");
   });
 
-  /* ---------- latihan ---------- */
-  function startVocabPractice(wordsOverride) {
+  /* ---------- latihan: 5 kata baru → tes ketik makna (acak) ---------- */
+  var vRound = [], vPhase = "idle", vIdx = 0, vCorrect = 0, vWrong = [], vAnswered = 0;
+  var vSeen = load("vSeen", []);   // kata yang sudah pernah dibagikan (putaran terakhir)
+
+  function vPool() {
     var pool = VOCAB.filter(function (w) {
       if (vLevel !== "all" && w.lv !== vLevel) return false;
       if (vTheme !== "all" && w.th !== vTheme) return false;
       return true;
     });
-    if (pool.length < 8) pool = VOCAB.filter(function (w) { return vLevel === "all" || w.lv === vLevel; });
-    if (pool.length < 8) pool = VOCAB;
-    var words = wordsOverride || window.EWTVocab.shuffle(pool.slice(0)).slice(0, 8);
-    vQuestions = window.EWTVocab.buildPractice(words, { offset: Math.floor(Math.random() * 3) });
-    vDone = 0; vCorrect = 0; vWrong = [];
+    if (pool.length < 5) pool = VOCAB.filter(function (w) { return vLevel === "all" || w.lv === vLevel; });
+    if (pool.length < 5) pool = VOCAB;
+    return pool;
+  }
+  function vMarkSeen(words) {
+    words.forEach(function (w) { if (vSeen.indexOf(w.w) === -1) vSeen.push(w.w); });
+    vSeen = vSeen.slice(-60);
+    save("vSeen", vSeen);
+  }
+  function vBlank(w) {
+    var re = new RegExp("\\b" + w.w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
+    return String(w.ex || "").replace(re, "______");
+  }
+  function startVocabPractice(wordsOverride) {
+    var pool = vPool();
+    var words;
+    if (wordsOverride && wordsOverride.length) {
+      words = wordsOverride.slice(0, 5);           // ujian ulang kata yang salah
+    } else {
+      var fresh = pool.filter(function (w) { return vSeen.indexOf(w.w) === -1; });
+      if (fresh.length < 5) { vSeen = []; fresh = pool; }   // semua sudah pernah → mulai putaran baru
+      words = window.EWTVocab.shuffle(fresh.slice(0)).slice(0, 5);
+      vMarkSeen(words);
+    }
+    vRound = words.map(function (w) { return { w: w, ok: false, typed: "", graded: false, matched: "" }; });
+    vIdx = 0; vCorrect = 0; vWrong = []; vAnswered = 0;
+    vPhase = "learn";
     renderVocabPractice();
   }
   function renderVocabPractice() {
     var el = $("#vPractice"); el.innerHTML = "";
-    if (!vQuestions.length) {
-      el.innerHTML = '<div class="meta">Tekan "Mulai latihan" untuk melihat 8 soal kosakata.</div>';
+    if (!vRound.length) {
+      el.innerHTML = '<div class="meta">Tekan <b>Ambil 5 kata baru</b> — kamu akan diberi 5 kata sulit, hafalkan artinya, lalu ditanya satu per satu secara acak.</div>';
       return;
     }
+    if (vPhase === "learn") return renderVLearn();
+    if (vPhase === "test") return renderVTest();
+    return renderVResult();
+  }
+  function vWordCard(w) {
+    return '<div class="v-learn">' +
+      '<div class="row gap8 wrap"><b class="v-word">' + esc(w.w) + "</b>" +
+      (w.ipa ? '<span class="meta">' + esc(w.ipa) + "</span>" : "") +
+      '<span class="tag">' + esc(w.pos) + "</span>" + '<span class="tag">' + esc(w.lv) + "</span></div>" +
+      '<div class="v-id"><b>' + esc(w.id) + "</b></div>" +
+      '<div class="v-ex">' + esc(w.ex) + "</div>" +
+      '<div class="v-ex v-id">' + esc(w.exId) + "</div>" +
+      (w.syn && w.syn.length ? '<div class="v-meta">Sinonim: ' + esc(w.syn.join(", ")) + "</div>" : "") +
+      (w.ant && w.ant.length ? '<div class="v-meta">Antonim: ' + esc(w.ant.join(", ")) + "</div>" : "") +
+      (w.coll && w.coll.length ? '<div class="v-meta">Kolokasi: ' + esc(w.coll.join(" · ")) + "</div>" : "") +
+      (w.root ? '<div class="v-meta">Asal kata: ' + esc(w.root) + "</div>" : "") +
+      "</div>";
+  }
+  function renderVLearn() {
+    var el = $("#vPractice");
     var head = document.createElement("div");
-    head.className = "row wrap gap8 mt8";
-    head.innerHTML = '<span class="meta" id="vScore">0/' + vQuestions.length + " dijawab • 0 benar</span>";
+    head.className = "row wrap gap8";
+    head.innerHTML = '<span class="tag q-num">Tahap 1 — 5 kata baru, baca &amp; hafalkan</span>';
     el.appendChild(head);
-    vQuestions.forEach(function (q, qi) {
-      var kindTxt = q.kind === "id2en" ? "arti → kata" : q.kind === "en2id" ? "kata → arti" : "dalam konteks";
-      var li = document.createElement("div");
-      li.className = "entry rq";
-      li.innerHTML =
-        '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + " • " + kindTxt + "</span></div>" +
-        '<div class="entry-body" style="display:block;">' + esc(q.text) + "</div>" +
-        '<div class="row wrap gap8" style="margin-top:8px;">' +
-        q.options.map(function (o, oi) {
-          return '<button class="btn ghost sm opt-btn" data-q="' + qi + '" data-o="' + oi + '">' + esc(o) + "</button>";
-        }).join("") +
-        "</div>" +
-        '<div class="vq-ex hidden" data-q="' + qi + '"></div>';
-      el.appendChild(li);
+    vRound.forEach(function (r) { el.insertAdjacentHTML("beforeend", vWordCard(r.w)); });
+    var box = document.createElement("div");
+    box.className = "row gap8 mt8";
+    box.innerHTML = '<button class="btn primary" id="btnVStartTest">Mulai tes — acak 🔀</button>' +
+      '<button class="btn ghost" id="btnVReroll">↻ Ganti 5 kata lain</button>';
+    el.appendChild(box);
+    $("#btnVStartTest").addEventListener("click", function () {
+      vRound = window.EWTVocab.shuffle(vRound.slice(0));
+      vIdx = 0; vCorrect = 0; vWrong = []; vAnswered = 0;
+      vPhase = "test";
+      renderVocabPractice();
+    });
+    $("#btnVReroll").addEventListener("click", function () { startVocabPractice(); });
+  }
+  function renderVTest() {
+    var el = $("#vPractice");
+    var r = vRound[vIdx];
+    var head = document.createElement("div");
+    head.className = "row wrap gap8";
+    head.innerHTML = '<span class="tag q-num">Tahap 2 — tulis maknanya</span>' +
+      '<span class="meta" id="vScore">' + vAnswered + "/" + vRound.length + " • " + vCorrect + " benar</span>";
+    el.appendChild(head);
+    var box = document.createElement("div");
+    box.className = "v-test";
+    box.innerHTML =
+      '<div class="v-test-word">' + esc(r.w.w) + (r.w.ipa ? ' <span class="meta">' + esc(r.w.ipa) + "</span>" : "") +
+      ' <span class="tag">' + esc(r.w.pos) + "</span></div>" +
+      '<div class="v-ex">' + esc(vBlank(r.w)) + "</div>" +
+      '<textarea id="vAnswer" class="textarea" rows="2" placeholder="Tulis maknanya di sini (Indonesia)…"></textarea>' +
+      '<div class="row gap8"><button class="btn primary" id="btnVCheck">Periksa</button>' +
+      '<button class="btn ghost" id="btnVShow">Lihat arti</button>' +
+      '<div class="spacer"></div><span class="meta" id="vHint">kata ' + (vIdx + 1) + " dari " + vRound.length + "</span></div>" +
+      '<div class="v-feed hidden" id="vFeed"></div>';
+    el.appendChild(box);
+    var ta = $("#vAnswer");
+    ta.focus();
+    ta.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); $("#btnVCheck").click(); }
+    });
+    $("#btnVCheck").addEventListener("click", function () {
+      var typed = ta.value.trim();
+      var g = window.EWTVocab.gradeMeaning(r.w, typed);
+      r.typed = typed; r.graded = true; r.ok = g.ok; r.matched = g.matched;
+      vAnswered++;
+      if (g.ok) vCorrect++; else vWrong.push(r.w.w);
+      var feed = $("#vFeed");
+      feed.classList.remove("hidden");
+      feed.classList.toggle("ok", g.ok);
+      feed.classList.toggle("bad", !g.ok);
+      feed.innerHTML = (g.ok ? "✓ Benar" : "✗ Belum tepat") +
+        (g.ok && g.matched ? ' — cocok dengan “' + esc(g.matched) + "”" : "") +
+        '<div class="v-feed-arti"><b>' + esc(r.w.w) + "</b> = " + esc(r.w.id) +
+        (r.w.exId ? '<div class="v-ex v-id">' + esc(r.w.exId) + "</div>" : "") + "</div>";
+      $("#btnVCheck").disabled = true;
+      $("#btnVShow").classList.add("hidden");
+      var next = document.createElement("div");
+      next.className = "row gap8 mt8";
+      next.innerHTML = '<button class="btn primary" id="btnVNext">' +
+        (vIdx + 1 >= vRound.length ? "Lihat hasil" : "Kata berikutnya") + "</button>";
+      box.appendChild(next);
+      $("#btnVNext").addEventListener("click", function () {
+        vIdx++;
+        vPhase = vIdx >= vRound.length ? "done" : "test";
+        renderVocabPractice();
+      });
+      var sc = $("#vScore");
+      if (sc) sc.textContent = vAnswered + "/" + vRound.length + " • " + vCorrect + " benar";
+      try { ta.blur(); $("#btnVNext").focus(); } catch (e) { }
+    });
+    $("#btnVShow").addEventListener("click", function () {
+      var feed = $("#vFeed");
+      feed.classList.remove("hidden");
+      feed.classList.add("bad");
+      feed.innerHTML = '<div class="v-feed-arti"><b>' + esc(r.w.w) + "</b> = " + esc(r.w.id) + "</div>" +
+        '<div class="meta">Ketik artinya dulu sebelum mengetuk tombol ini.</div>';
     });
   }
-  function finishVocabPractice() {
+  function finishVocabRound() {
     var st = load("vocabStats", {});
-    vQuestions.forEach(function (q) {
-      if (!st[q.word]) st[q.word] = { ok: 0, no: 0 };
-      if (q.ok) st[q.word].ok++; else st[q.word].no++;
+    vRound.forEach(function (r) {
+      if (!st[r.w.w]) st[r.w.w] = { ok: 0, no: 0 };
+      if (r.ok) st[r.w.w].ok++; else st[r.w.w].no++;
     });
     save("vocabStats", st);
     vocabStats = st;
     markDay("vocab");
     renderDashboard();
     renderVocabList();
+  }
+  function renderVResult() {
+    finishVocabRound();
     var el = $("#vPractice");
-    var pct = Math.round(vCorrect / vQuestions.length * 100);
-    var wrongList = vWrong.length ? '<ul class="v-wrong">' + vWrong.map(function (w) {
-      var v = VOCAB.filter(function (x) { return x.w === w; })[0];
-      return v ? "<li><b>" + esc(v.w) + "</b> — " + esc(v.id) + "</li>" : "";
-    }).join("") + "</ul>" : "";
+    var pct = Math.round(vCorrect / vRound.length * 100);
     var box = document.createElement("div");
     box.className = "result-box showing";
-    box.innerHTML = "<b>Skor " + vCorrect + "/" + vQuestions.length + " (" + pct + "%)</b> — " +
-      (pct === 100 ? "Sempurna! Kosakata ini sudah melekat."
-        : pct >= 75 ? "Bagus. Tinjau dulu yang masih salah."
-          : "Ulangi yang salah sampai menguasainya — daftarnya di bawah.") +
-      wrongList +
-      '<div class="row gap8 mt8"><button class="btn primary sm" id="btnVRetry">↻ Ulangi yang salah</button></div>';
+    box.innerHTML = "<b>Skor " + vCorrect + "/" + vRound.length + " (" + pct + "%)</b> — " +
+      (pct === 100 ? "Sempurna! 5 kata baru langsung melekat."
+        : pct >= 60 ? "Bagus — ulangi yang masih salah."
+          : "Ulangi yang salah sampai menguasainya.") +
+      '<div class="row gap8 mt8">' +
+      '<button class="btn primary sm" id="btnVRetry">↻ Ulangi yang salah</button>' +
+      '<button class="btn ghost sm" id="btnVNew">5 kata baru lagi</button></div>';
     el.appendChild(box);
-    var rb = $("#btnVRetry");
-    if (rb) rb.addEventListener("click", function () {
+    if (vWrong.length) {
+      var ul = document.createElement("ul");
+      ul.className = "v-wrong";
+      ul.innerHTML = vWrong.map(function (name) {
+        var v = VOCAB.filter(function (x) { return x.w === name; })[0];
+        return v ? "<li><b>" + esc(v.w) + "</b> — " + esc(v.id) + "</li>" : "";
+      }).join("");
+      box.appendChild(ul);
+    }
+    $("#btnVRetry").addEventListener("click", function () {
       var pool = VOCAB.filter(function (w) { return vWrong.indexOf(w.w) > -1; });
       if (!pool.length) { toast("Tidak ada yang salah 🎉"); return; }
-      vQuestions = window.EWTVocab.buildPractice(pool, { offset: Math.floor(Math.random() * 3) });
-      vDone = 0; vCorrect = 0; vWrong = [];
-      renderVocabPractice();
+      startVocabPractice(pool);
     });
+    $("#btnVNew").addEventListener("click", function () { startVocabPractice(); });
   }
-  $("#vPractice").addEventListener("click", function (e) {
-    var b = e.target.closest(".opt-btn");
-    if (!b || b.disabled) return;
-    var qi = +b.dataset.q, oi = +b.dataset.o;
-    var q = vQuestions[qi];
-    if (!q || q.done) return;
-    q.done = true;
-    var ok = q.options[oi] === q.answer;
-    q.ok = ok;
-    vDone++; if (ok) vCorrect++; else vWrong.push(q.word);
-    var ci = q.options.indexOf(q.answer);
-    $$("#vPractice .opt-btn").forEach(function (btn) {
-      if (+btn.dataset.q !== qi) return;
-      btn.disabled = true;
-      if (+btn.dataset.o === ci) btn.classList.add("correct");
-      if (btn === b && !ok) btn.classList.add("wrong");
-    });
-    var ex = document.querySelector('#vPractice .vq-ex[data-q="' + qi + '"]');
-    if (ex) { ex.textContent = (ok ? "✓ " : "✗ ") + q.explain; ex.classList.remove("hidden"); }
-    var sc = $("#vScore");
-    if (sc) sc.textContent = vDone + "/" + vQuestions.length + " dijawab • " + vCorrect + " benar";
-    if (vDone >= vQuestions.length) finishVocabPractice();
-  });
 
   /* ---------- kamus cepat ---------- */
   function runVocabLookup() {
