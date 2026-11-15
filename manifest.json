@@ -1,7 +1,7 @@
 {
   "name": "English Writing Trainer",
   "short_name": "EWT",
-  "description": "Sistem latihan menulis bahasa Inggris: journaling, copywork, extensive reading, draft-correct-rewrite, dan error log.",
+  "description": "Sistem latihan menulis bahasa Inggris: journaling, latihan kosakata, extensive reading, draft-correct-rewrite, dan error log.",
   "lang": "id",
   "start_url": "./index.html",
   "scope": "./",

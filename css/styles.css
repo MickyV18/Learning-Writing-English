@@ -223,6 +223,30 @@ textarea{ min-height:110px; }
   max-height:190px; overflow:auto;
 }
 
+/* ---------- kosakata ---------- */
+.vlookup{
+  border:1px solid var(--border); border-radius:12px; background:var(--surface-2);
+  padding:14px 16px;
+}
+.vlookup .vl-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.vlookup .vl-head b{ font-size:19px; }
+.vlookup .v-id{ color:var(--text); font-size:14px; margin-bottom:6px; }
+.vlookup .v-def{ color:var(--muted); font-size:13px; margin-bottom:6px; }
+.vlookup .v-ex{ font-size:13.5px; line-height:1.6; margin:6px 0; }
+.vcard .entry-body{ color:var(--text); }
+.vcard .v-id{ font-size:14px; margin-bottom:4px; }
+.vcard .v-ex{ font-size:13px; line-height:1.6; margin:6px 0; }
+.vcard .v-id.v-ex{ color:var(--muted); font-size:12.5px; }
+.vcard .v-meta{ font-size:12px; color:var(--muted); margin-top:3px; }
+.tag.v-ok{ color:var(--green); }
+.tag.v-no{ color:var(--red); }
+.vq-ex{
+  margin-top:8px; font-size:13px; color:var(--muted);
+  background:var(--surface); border:1px solid var(--border);
+  border-radius:9px; padding:9px 12px;
+}
+.v-wrong{ margin:8px 0 0 18px; font-size:13px; display:flex; flex-direction:column; gap:4px; }
+
 /* ---------- penilaian tulisan 0-100 ---------- */
 .score-box{
   margin-top:12px; border:1px solid var(--border); border-radius:12px;
@@ -286,16 +310,7 @@ textarea{ min-height:110px; }
 }
 .icon-btn:hover{ color:var(--red); background:var(--red-soft); }
 
-/* ---------- copywork ---------- */
-.target-box{
-  background:var(--surface-2); border:1px solid var(--border);
-  border-radius:10px; padding:14px 16px; font-size:14px; line-height:1.8;
-  margin-bottom:12px; min-height:60px;
-}
-.recall-note{
-  background:var(--yellow-soft); color:var(--yellow);
-  border-radius:10px; padding:10px 14px; font-size:13px; margin-bottom:12px;
-}
+/* ---------- hasil latihan ---------- */
 .w-ok{ color:var(--green); }
 .w-miss{ color:var(--red); background:var(--red-soft); border-radius:3px; padding:0 2px; font-weight:600; }
 .w-extra{ color:var(--yellow); background:var(--yellow-soft); border-radius:3px; padding:0 2px; text-decoration:line-through; }

@@ -39,7 +39,7 @@
   /* ---------------- state ---------------- */
   var settings = load("settings", { name: "", goal: 150, theme: "dark" });
   var acts = load("acts", {});         // { iso: { journal:1, copy:1, read:1, cyc:1 } }
-  var copyBest = load("copyBest", {}); // { textKey: bestAccuracy }
+  var vocabStats = load("vocabStats", {}); // { word: { ok: n, no: n } }
 
   function markDay(kind) {
     var iso = todayISO();
@@ -53,7 +53,7 @@
   (function migrate() {
     function old(k) { try { var v = localStorage.getItem("ewt_v1_" + k); return v === null ? null : JSON.parse(v); } catch (e) { return null; } }
     if (!load("migrated", false)) {
-      var oj = old("journal"), ord = old("reading"), oc = old("cycles"), oe = old("errors"), od = old("days"), ob = old("copyBest");
+      var oj = old("journal"), ord = old("reading"), oc = old("cycles"), oe = old("errors"), od = old("days");
       var j = load("journal", null);
       if (oj && !j) save("journal", oj.map(function (it) {
         return { id: uid(), date: it.date || todayISO(), topic: it.topic || "—", prompt: "", words: it.words || countWords(it.text || ""), text: it.text || "" };
@@ -71,7 +71,6 @@
         Object.keys(od).forEach(function (iso) { m[iso] = { journal: 1 }; });
         acts = m; save("acts", m);
       }
-      if (typeof ob === "number" && !Object.keys(copyBest).length) copyBest = { built0: ob };
       save("migrated", true);
     }
   })();
@@ -102,7 +101,7 @@
   var PAGES = {
     dashboard: ["Dashboard", "Ringkasan latihanmu hari ini"],
     journal: ["Journaling", "Metode 1 — menulis rutin dengan prompt harian"],
-    copywork: ["Copywork", "Metode 2 — imitasi teks berkualitas untuk membangun intuisi"],
+    vocab: ["Kosakata", "Metode 2 — kosakata sulit, kamus cepat, dan latihan arti kata"],
     reading: ["Reading", "Baca artikel online (Wikipedia) — lalu catat pola & uji pemahaman"],
     cycle: ["Cycle", "Metode 4 — draft → correct → rewrite"],
     corrector: ["Koreksi Grammar", "Periksa & koreksi grammar — aturan offline + LanguageTool online"],
@@ -185,8 +184,9 @@
     var j = load("journal", []), c = load("cycles", []), e = load("errors", []), r = load("readings", []);
     $("#s-entries").textContent = j.length;
     $("#s-sessions").textContent = c.length;
-    var best = 0; Object.keys(copyBest).forEach(function (k) { if (copyBest[k] > best) best = copyBest[k]; });
-    $("#s-copybest").textContent = best ? best + "%" : "–";
+    var mastered = 0;
+    Object.keys(vocabStats).forEach(function (k) { if (vocabStats[k] && vocabStats[k].ok >= 3) mastered++; });
+    $("#s-vocab").textContent = mastered ? mastered : "–";
     $("#s-errors").textContent = e.length;
     var words = 0; j.forEach(function (x) { words += x.words || 0; });
     $("#s-words").textContent = words.toLocaleString("id-ID");
@@ -200,7 +200,7 @@
 
     // checklist bars (Cycle tidak lagi masuk checklist — tetap dihitung untuk streak)
     var t = acts[todayISO()] || {};
-    [["journal", t.journal || 0], ["copy", t.copy || 0], ["read", t.read || 0]].forEach(function (p) {
+    [["journal", t.journal || 0], ["vocab", t.vocab || 0], ["read", t.read || 0]].forEach(function (p) {
       var f = $("#ck-" + p[0]);
       f.style.width = Math.min(100, p[1] / 1 * 100) + "%";
       f.style.background = p[1] ? "var(--green)" : "var(--accent)";
@@ -622,135 +622,207 @@
     }
   });
 
-  /* ---------------- copywork ---------------- */
-  var TEXTS = [
-    { key: "built0", genre: "Opini", title: "Remote work", body: "Working from home has changed the way we think about productivity. At first, many managers worried that employees would waste time without supervision. In practice, however, the opposite often happened: people worked longer hours and reported fewer distractions. The real challenge is not laziness but isolation, and the companies that solve it well tend to offer both flexibility and community." },
-    { key: "built1", genre: "Naratif", title: "A rainy morning", body: "The rain began before sunrise, tapping softly against the window until the whole street turned silver. By the time I stepped outside, puddles had gathered along the pavement, each one holding a copy of the grey sky. I walked slowly, listening to the rhythm of water on umbrellas, and for a moment the noisy city felt quiet, almost gentle." },
-    { key: "built2", genre: "Ekspositori", title: "Why sleep matters", body: "Sleep is not a luxury; it is a biological necessity. During deep sleep, the brain sorts the day's memories and clears away waste, which is why a single bad night can cloud both mood and concentration. Studies consistently show that people who sleep seven to eight hours make fewer errors and learn faster. Protecting your sleep, therefore, may be the simplest way to protect your mind." },
-    { key: "built3", genre: "Persuasif", title: "Learning by doing", body: "Nobody learns to swim by reading about water. Skills grow through practice, feedback, and correction, in that order. A beginner who writes one imperfect paragraph every day will soon overtake a reader who studies grammar for months without writing at all. Progress feels uncomfortable because it is supposed to: every mistake you notice is a lesson arriving early." },
-    { key: "built4", genre: "Deskripsi", title: "A corner coffee shop", body: "Tucked between a bookstore and a bakery, the coffee shop announces itself only by smell. Its two windows pour warm light onto the pavement, and inside, chairs of mismatched wood circle small round tables. The barista greets regulars by name and memorizes orders without writing them down. Even the silence here has texture: pages turning, cups clinking, the low murmur of unhurried talk." },
-    { key: "built5", genre: "Argumentasi", title: "City or countryside", body: "Urban defenders point to opportunity: jobs, institutions, and people packed within a few square kilometres. Rural advocates answer with space, cleaner air, and a slower rhythm that protects mental health. Both are right, which is precisely the problem. The choice is never between good and bad but between different versions of a good life, and honesty demands that we admit the price of whichever version we pick." },
-    { key: "built6", genre: "Email formal", title: "A polite request", body: "Dear Mr. Tanaka, I am writing to follow up on our meeting last Tuesday regarding the proposed schedule. Could you let me know whether the revised dates work for your team? If any of them conflict with your commitments, I would be happy to arrange alternatives. I look forward to hearing from you at your earliest convenience. Kind regards, Alex." },
-    { key: "built7", genre: "Ringkasan", title: "Summarizing an idea", body: "In short, the book argues that talent is overrated and deliberate practice is everything. The author supports this claim with studies of musicians, chess players, and athletes, all of whom improve through focused repetition rather than gift. Critics reply that opportunity and timing play roles the author underplays. Even so, the practical advice stands: work at the edge of your ability, get feedback, and repeat." }
-  ];
-  var copySel = $("#copySelect");
-  TEXTS.forEach(function (t, i) {
-    var o = document.createElement("option");
-    o.value = t.key;
-    o.textContent = t.genre + " — " + t.title;
-    copySel.appendChild(o);
-  });
-  var oc = document.createElement("option");
-  oc.value = "custom"; oc.textContent = "Teks sendiri (paste di bawah)";
-  copySel.appendChild(oc);
+  /* ---------------- kosakata (menggantikan copywork) ---------------- */
+  var VOCAB = (window.EWTVocab && window.EWTVocab.words) ? window.EWTVocab.words : [];
+  var vTheme = load("vTheme", "all");
+  var vLevel = load("vLevel", "all");
+  var vQuestions = [], vDone = 0, vCorrect = 0, vWrong = [];
 
-  var copyMode = "copy";
-  function currentTarget() {
-    if (copySel.value === "custom") return $("#customCopy").value.trim();
-    var t = TEXTS.filter(function (x) { return x.key === copySel.value; })[0];
-    return t ? t.body : "";
-  }
-  function currentKey() { return copySel.value; }
-  function renderTarget() {
-    var body = currentTarget();
-    var box = $("#copyTarget");
-    box.innerHTML = body
-      ? body.split(/\s+/).map(function (w) { return "<span>" + esc(w) + "</span>"; }).join(" ")
-      : '<span class="lbl">Pilih teks di atas, atau tempel teksmu sendiri.</span>';
-    box.classList.toggle("blur", copyMode === "recall" && !$("#copyResult").classList.contains("showing"));
-    $("#recallNote").classList.toggle("hidden", copyMode !== "recall");
-  }
-  $$(".seg-btn[data-mode]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      copyMode = b.dataset.mode;
-      $$(".seg-btn[data-mode]").forEach(function (x) { x.classList.toggle("active", x === b); });
-      $("#copyResult").classList.remove("showing");
-      renderTarget();
+  /* ---------- daftar kosakata ---------- */
+  function vFiltered() {
+    var q = ($("#vFilter").value || "").toLowerCase().trim();
+    return VOCAB.filter(function (w) {
+      if (vTheme !== "all" && w.th !== vTheme) return false;
+      if (vLevel !== "all" && w.lv !== vLevel) return false;
+      if (q && (w.w + " " + w.id + " " + w.ex).toLowerCase().indexOf(q) === -1) return false;
+      return true;
     });
-  });
-  copySel.addEventListener("change", function () {
-    $("#customWrap").classList.toggle("hidden", copySel.value !== "custom");
-    resetCopyUI();
-    renderTarget();
-    showBest();
-  });
-  $("#customCopy").addEventListener("input", debounce(function () { renderTarget(); }, 200));
-
-  function showBest() {
-    var b = copyBest[currentKey()];
-    $("#copyBestNote").textContent = b ? "Rekormu: " + b + "%" : "";
   }
-  function resetCopyUI() {
-    $("#copyInput").value = "";
-    $("#copyAcc").textContent = "Akurasi: –";
-    var res = $("#copyResult");
-    res.classList.remove("showing"); res.classList.add("hidden"); res.innerHTML = "";
-    renderTarget();
-  }
-  $("#btnCopyReset").addEventListener("click", resetCopyUI);
-
-  // tokenizer + LCS diff
-  function tokens(s) { return s.trim().match(/\S+/g) || []; }
-  function norm(w) { return w.toLowerCase().replace(/^[^a-z0-9'-]+|[^a-z0-9'-]+$/gi, ""); }
-  function makeDiff(a, b) { // a = target words, b = typed words
-    var n = a.length, m = b.length;
-    var dp = [];
-    for (var i = 0; i <= n; i++) dp.push(new Uint16Array(m + 1));
-    for (i = n - 1; i >= 0; i--) for (var j = m - 1; j >= 0; j--) {
-      dp[i][j] = norm(a[i]) === norm(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-    var ma = new Array(n).fill(false), mb = new Array(m).fill(false);
-    i = 0; j = 0;
-    while (i < n && j < m) {
-      if (norm(a[i]) === norm(b[j]) && dp[i][j] === dp[i + 1][j + 1] + 1) { ma[i] = mb[j] = true; i++; j++; }
-      else if (dp[i + 1][j] >= dp[i][j + 1]) i++;
-      else j++;
-    }
-    return { ma: ma, mb: mb };
-  }
-  $("#btnCopyCheck").addEventListener("click", function () {
-    var target = currentTarget();
-    if (!target) { toast("Pilih atau tempel teks dulu."); return; }
-    var typed = $("#copyInput").value.trim();
-    if (!typed) { toast("Belum ada yang diketik."); return; }
-    var tw = tokens(target), iw = tokens(typed);
-    var d = makeDiff(tw, iw);
-    var matches = d.ma.filter(Boolean).length;
-    var acc = tw.length ? Math.round(matches / tw.length * 100) : 0;
-
-    // render target dengan status kata
-    var box = $("#copyTarget"), spans = box.querySelectorAll("span");
-    if (spans.length === tw.length) tw.forEach(function (_, i) {
-      spans[i].className = d.ma[i] ? "w-ok" : "w-miss";
+  function renderVocabList() {
+    var el = $("#vList"); el.innerHTML = "";
+    var list = vFiltered();
+    var need = 0;
+    Object.keys(vocabStats).forEach(function (k) { if (vocabStats[k] && vocabStats[k].no > 0) need++; });
+    $("#vSummary").textContent = list.length + " kata" +
+      (need ? " • " + need + " perlu diulang" : "") + " • " + Object.keys(vocabStats).length + " pernah dilatih";
+    if (!list.length) { el.innerHTML = '<div class="ok-note">Tidak ada kata yang cocok dengan filter.</div>'; return; }
+    list.slice(0, 150).forEach(function (w) {
+      var st = vocabStats[w.w] || { ok: 0, no: 0 };
+      var badge = st.ok >= 3 ? '<span class="tag v-ok">dikuasai</span>'
+        : (st.no > 0 ? '<span class="tag v-no">perlu diulang</span>' : "");
+      var li = document.createElement("div");
+      li.className = "entry vcard";
+      li.innerHTML =
+        '<div class="entry-head"><b>' + esc(w.w) + "</b>" + badge +
+        '<span class="meta">' + esc(w.pos) + " • " + esc(w.lv) + " • " + esc(w.th) + (w.ipa ? " • " + esc(w.ipa) : "") + "</span></div>" +
+        '<div class="entry-body">' +
+        '<div class="v-id"><b>' + esc(w.id) + "</b></div>" +
+        '<div class="v-ex">' + esc(w.ex) + "</div>" +
+        '<div class="v-ex v-id">' + esc(w.exId) + "</div>" +
+        '<div class="v-meta">Sinonim: ' + esc((w.syn || []).join(", ")) + "</div>" +
+        '<div class="v-meta">Antonim: ' + esc((w.ant || []).join(", ")) + "</div>" +
+        '<div class="v-meta">Kolokasi: ' + esc((w.coll || []).join(" · ")) + "</div>" +
+        '<div class="v-meta">Asal kata: ' + esc(w.root) + "</div>" +
+        "</div>";
+      el.appendChild(li);
     });
-    box.classList.remove("blur");
-    $("#copyResult").classList.remove("hidden");
-    $("#copyResult").classList.add("showing");
-
-    var typedHtml = iw.map(function (w, i) {
-      return '<span class="' + (d.mb[i] ? "w-ok" : "w-extra") + '">' + esc(w) + "</span>";
-    }).join(" ");
-    var extras = d.mb.filter(function (x) { return !x; }).length;
-    var misses = d.ma.filter(function (x) { return !x; }).length;
-    var verdict;
-    if (acc === 100 && extras === 0) verdict = "Sempurna. Intuisi struktur kalimatmu terasah.";
-    else if (acc >= 85) verdict = "Bagus! Lihat kata merah di target — itu yang keliru atau terlewat. Tulis ulang sekali lagi untuk mengunci.";
-    else if (acc >= 60) verdict = "Cukup. Coba salin kalimat per kalimat, bukan satu blok besar.";
-    else verdict = "Jangan berkecil hati — pecah jadi dua kalimat pertama dulu, kuasai itu, lalu lanjut.";
-    $("#copyResult").innerHTML =
-      "<b>Akurasi " + acc + "%</b> — cocok " + matches + "/" + tw.length + " kata. " +
-      (misses ? 'Terlewat/keliru: <span class="w-miss">' + misses + "</span> kata. " : "") +
-      (extras ? 'Ekstra: <span class="w-extra">' + extras + "</span> kata. " : "") +
-      verdict +
-      '<div class="altctrl"><span class="lbl">Penulisanmu:</span><br>' + typedHtml + "</div>";
-    $("#copyAcc").textContent = "Akurasi: " + acc + "%";
-    if (acc > (copyBest[currentKey()] || 0)) {
-      copyBest[currentKey()] = acc; save("copyBest", copyBest);
-      showBest(); toast("Rekor baru: " + acc + "%! 🎉");
-    }
-    markDay("copy"); renderDashboard();
+  }
+  $("#vList").addEventListener("click", function (e) {
+    var head = e.target.closest(".entry-head");
+    if (head) head.parentElement.classList.toggle("open");
   });
-  showBest(); renderTarget();
+
+  /* ---------- latihan ---------- */
+  function startVocabPractice(wordsOverride) {
+    var pool = VOCAB.filter(function (w) {
+      if (vLevel !== "all" && w.lv !== vLevel) return false;
+      if (vTheme !== "all" && w.th !== vTheme) return false;
+      return true;
+    });
+    if (pool.length < 8) pool = VOCAB.filter(function (w) { return vLevel === "all" || w.lv === vLevel; });
+    if (pool.length < 8) pool = VOCAB;
+    var words = wordsOverride || window.EWTVocab.shuffle(pool.slice(0)).slice(0, 8);
+    vQuestions = window.EWTVocab.buildPractice(words, { offset: Math.floor(Math.random() * 3) });
+    vDone = 0; vCorrect = 0; vWrong = [];
+    renderVocabPractice();
+  }
+  function renderVocabPractice() {
+    var el = $("#vPractice"); el.innerHTML = "";
+    if (!vQuestions.length) {
+      el.innerHTML = '<div class="meta">Tekan "Mulai latihan" untuk melihat 8 soal kosakata.</div>';
+      return;
+    }
+    var head = document.createElement("div");
+    head.className = "row wrap gap8 mt8";
+    head.innerHTML = '<span class="meta" id="vScore">0/' + vQuestions.length + " dijawab • 0 benar</span>";
+    el.appendChild(head);
+    vQuestions.forEach(function (q, qi) {
+      var kindTxt = q.kind === "id2en" ? "arti → kata" : q.kind === "en2id" ? "kata → arti" : "dalam konteks";
+      var li = document.createElement("div");
+      li.className = "entry rq";
+      li.innerHTML =
+        '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + " • " + kindTxt + "</span></div>" +
+        '<div class="entry-body" style="display:block;">' + esc(q.text) + "</div>" +
+        '<div class="row wrap gap8" style="margin-top:8px;">' +
+        q.options.map(function (o, oi) {
+          return '<button class="btn ghost sm opt-btn" data-q="' + qi + '" data-o="' + oi + '">' + esc(o) + "</button>";
+        }).join("") +
+        "</div>" +
+        '<div class="vq-ex hidden" data-q="' + qi + '"></div>';
+      el.appendChild(li);
+    });
+  }
+  function finishVocabPractice() {
+    var st = load("vocabStats", {});
+    vQuestions.forEach(function (q) {
+      if (!st[q.word]) st[q.word] = { ok: 0, no: 0 };
+      if (q.ok) st[q.word].ok++; else st[q.word].no++;
+    });
+    save("vocabStats", st);
+    vocabStats = st;
+    markDay("vocab");
+    renderDashboard();
+    renderVocabList();
+    var el = $("#vPractice");
+    var pct = Math.round(vCorrect / vQuestions.length * 100);
+    var wrongList = vWrong.length ? '<ul class="v-wrong">' + vWrong.map(function (w) {
+      var v = VOCAB.filter(function (x) { return x.w === w; })[0];
+      return v ? "<li><b>" + esc(v.w) + "</b> — " + esc(v.id) + "</li>" : "";
+    }).join("") + "</ul>" : "";
+    var box = document.createElement("div");
+    box.className = "result-box showing";
+    box.innerHTML = "<b>Skor " + vCorrect + "/" + vQuestions.length + " (" + pct + "%)</b> — " +
+      (pct === 100 ? "Sempurna! Kosakata ini sudah melekat."
+        : pct >= 75 ? "Bagus. Tinjau dulu yang masih salah."
+          : "Ulangi yang salah sampai menguasainya — daftarnya di bawah.") +
+      wrongList +
+      '<div class="row gap8 mt8"><button class="btn primary sm" id="btnVRetry">↻ Ulangi yang salah</button></div>';
+    el.appendChild(box);
+    var rb = $("#btnVRetry");
+    if (rb) rb.addEventListener("click", function () {
+      var pool = VOCAB.filter(function (w) { return vWrong.indexOf(w.w) > -1; });
+      if (!pool.length) { toast("Tidak ada yang salah 🎉"); return; }
+      vQuestions = window.EWTVocab.buildPractice(pool, { offset: Math.floor(Math.random() * 3) });
+      vDone = 0; vCorrect = 0; vWrong = [];
+      renderVocabPractice();
+    });
+  }
+  $("#vPractice").addEventListener("click", function (e) {
+    var b = e.target.closest(".opt-btn");
+    if (!b || b.disabled) return;
+    var qi = +b.dataset.q, oi = +b.dataset.o;
+    var q = vQuestions[qi];
+    if (!q || q.done) return;
+    q.done = true;
+    var ok = q.options[oi] === q.answer;
+    q.ok = ok;
+    vDone++; if (ok) vCorrect++; else vWrong.push(q.word);
+    var ci = q.options.indexOf(q.answer);
+    $$("#vPractice .opt-btn").forEach(function (btn) {
+      if (+btn.dataset.q !== qi) return;
+      btn.disabled = true;
+      if (+btn.dataset.o === ci) btn.classList.add("correct");
+      if (btn === b && !ok) btn.classList.add("wrong");
+    });
+    var ex = document.querySelector('#vPractice .vq-ex[data-q="' + qi + '"]');
+    if (ex) { ex.textContent = (ok ? "✓ " : "✗ ") + q.explain; ex.classList.remove("hidden"); }
+    var sc = $("#vScore");
+    if (sc) sc.textContent = vDone + "/" + vQuestions.length + " dijawab • " + vCorrect + " benar";
+    if (vDone >= vQuestions.length) finishVocabPractice();
+  });
+
+  /* ---------- kamus cepat ---------- */
+  function runVocabLookup() {
+    var w = ($("#vSearch").value || "").trim();
+    if (!w) { toast("Ketik dulu kata yang mau dicari."); return; }
+    var el = $("#vLookup");
+    el.classList.remove("hidden");
+    el.innerHTML = '<div class="meta">Mencari "' + esc(w) + '"…</div>';
+    window.EWTVocab.lookupWord(w).then(function (r) {
+      var h = '<div class="vl-head"><b>' + esc(r.word) + "</b>" +
+        (r.phonetic ? ' <span class="meta">' + esc(r.phonetic) + "</span>" : "") +
+        (r.pos ? ' <span class="tag">' + esc(r.pos) + "</span>" : "") + "</div>";
+      if (r.id) h += '<div class="v-id"><b>Arti (Bahasa Indonesia):</b> ' + esc(r.id) + "</div>";
+      if (r.def && r.def !== r.id) h += '<div class="v-def"><b>Definisi (English):</b> ' + esc(r.def) + "</div>";
+      if (r.examples.length) h += '<div class="v-ex"><b>Contoh:</b><br>' +
+        r.examples.map(function (x) { return "• " + esc(x); }).join("<br>") + "</div>";
+      if (r.synonyms.length) h += '<div class="v-meta">Sinonim: ' + esc(r.synonyms.join(", ")) + "</div>";
+      if (r.antonyms.length) h += '<div class="v-meta">Antonim: ' + esc(r.antonyms.join(", ")) + "</div>";
+      h += '<div class="v-meta">Sumber: ' + esc(r.source || "—") + "</div>";
+      h += '<div class="row gap8 mt8"><button class="btn primary sm" id="btnVPracticeWord">Latih kata ini</button></div>';
+      el.innerHTML = h;
+      $("#btnVPracticeWord").addEventListener("click", function () {
+        var one = r.local || {
+          w: r.word, id: r.id || r.def, ex: r.examples[0] || "",
+          exId: "", pos: r.pos || "", syn: r.synonyms, lv: "B2", th: "Kustom"
+        };
+        startVocabPractice([one]);
+        try { $("#vPractice").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) { }
+      });
+    }).catch(function (e) {
+      el.innerHTML = '<div class="issue">Gagal mencari: ' + esc(e.message || e) + ". Cek internet atau ejaan kata.</div>";
+    });
+  }
+
+  /* ---------- kontrol ---------- */
+  function fillVocabControls() {
+    var themes = ["all"], levels = ["all", "A2", "B1", "B2", "C1"], o;
+    VOCAB.forEach(function (w) { if (themes.indexOf(w.th) === -1) themes.push(w.th); });
+    var selT = $("#vTheme"), selL = $("#vLevel");
+    themes.forEach(function (t) { o = document.createElement("option"); o.value = t; o.textContent = t === "all" ? "Semua tema" : t; selT.appendChild(o); });
+    levels.forEach(function (l) { o = document.createElement("option"); o.value = l; o.textContent = l === "all" ? "Semua level" : l; selL.appendChild(o); });
+    selT.value = vTheme; selL.value = vLevel;
+    selT.addEventListener("change", function () { vTheme = this.value; save("vTheme", vTheme); renderVocabList(); });
+    selL.addEventListener("change", function () { vLevel = this.value; save("vLevel", vLevel); renderVocabList(); });
+    $("#vFilter").addEventListener("input", debounce(renderVocabList, 200));
+    $("#btnVLookup").addEventListener("click", runVocabLookup);
+    $("#vSearch").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); runVocabLookup(); }
+    });
+    $("#btnVPractice").addEventListener("click", function () { startVocabPractice(); });
+    renderVocabList();
+  }
+  fillVocabControls();
 
   /* ---------------- reading ---------------- */
   $("#btnSaveReading").addEventListener("click", function () {
@@ -1980,7 +2052,7 @@
      Draft (draftJournal/draftCycle/draftCorr) tetap lokal per perangkat.
      Data ditulis melalui save() → cache localStorage + write-through cloud.
      ============================================================ */
-  var META_KEYS = ["settings", "acts", "copyBest", "promptIdx"];
+  var META_KEYS = ["settings", "acts", "vocabStats", "promptIdx"];
   var LIST_KEYS = ["readings", "cycles", "errors"];
 
   var cloudConfigured = typeof FIREBASE_CONFIG !== "undefined" && !!FIREBASE_CONFIG.apiKey;
@@ -2088,7 +2160,7 @@
         var mergedJ = mergeJournal(localJ, cloud.journal, sameAccount);
 
         // ---------- meta ----------
-        var ca = cloud.meta.acts, cb = cloud.meta.copyBest, cs = cloud.meta.settings, cp = cloud.meta.promptIdx;
+        var ca = cloud.meta.acts, cb = cloud.meta.vocabStats, cs = cloud.meta.settings, cp = cloud.meta.promptIdx;
         if (sameAccount) {
           // simpan preferensi/penanda lokal, gabung entri aktivitas & rekaman
           if (ca) {
@@ -2097,14 +2169,18 @@
             saveLocal("acts", la);
           }
           if (cb) {
-            var lc = load("copyBest", {});
-            Object.keys(cb).forEach(function (k) { if (lc[k] === undefined || cb[k] > lc[k]) lc[k] = cb[k]; });
-            saveLocal("copyBest", lc);
+            var lc = load("vocabStats", {});
+            Object.keys(cb).forEach(function (k) {
+              if (!lc[k]) lc[k] = { ok: 0, no: 0 };
+              lc[k].ok = Math.max(lc[k].ok || 0, (cb[k] && cb[k].ok) || 0);
+              lc[k].no = Math.max(lc[k].no || 0, (cb[k] && cb[k].no) || 0);
+            });
+            saveLocal("vocabStats", lc);
           }
         } else {
           if (ca) saveLocal("acts", ca);
           else if (!Object.keys(load("acts", {})).length) saveLocal("acts", {});
-          if (cb && Object.keys(cb).length) saveLocal("copyBest", cb);
+          if (cb && Object.keys(cb).length) saveLocal("vocabStats", cb);
           if (cs) saveLocal("settings", cs);                          // akun lain: cloud menang
           if (cp !== undefined) saveLocal("promptIdx", cp);
         }
@@ -2164,7 +2240,7 @@
     // muat ulang state global & refresh semua tampilan
     settings = load("settings", { name: "", goal: 150, theme: "dark" });
     acts = load("acts", {});
-    copyBest = load("copyBest", {});
+    vocabStats = load("vocabStats", {});
     promptIdx = load("promptIdx", 0);
     if (promptIdx < 0 || promptIdx >= PROMPTS.length) promptIdx = 0;
     document.documentElement.dataset.theme = settings.theme || "dark";
@@ -2186,7 +2262,7 @@
      ============================================================ */
   var GH_API = "https://api.github.com";
   var KC_FILE = "ewt-progress.json";
-  var KC_SYNC_KEYS = ["journal", "readings", "cycles", "errors", "acts", "copyBest", "settings", "promptIdx"];
+  var KC_SYNC_KEYS = ["journal", "readings", "cycles", "errors", "acts", "vocabStats", "settings", "promptIdx"];
   var kcReady = false;
   var kcDirty = false;
   var kcBusy = false;
@@ -2218,10 +2294,14 @@
       Object.keys(d.acts).forEach(function (iso) { if (!la[iso] || !Object.keys(la[iso]).length) la[iso] = d.acts[iso]; });
       saveLocal("acts", la);
     }
-    if (d.copyBest) {
-      var lc = load("copyBest", {});
-      Object.keys(d.copyBest).forEach(function (k) { if (lc[k] === undefined || d.copyBest[k] > lc[k]) lc[k] = d.copyBest[k]; });
-      saveLocal("copyBest", lc);
+    if (d.vocabStats) {
+      var lv = load("vocabStats", {});
+      Object.keys(d.vocabStats).forEach(function (k) {
+        if (!lv[k]) lv[k] = { ok: 0, no: 0 };
+        lv[k].ok = Math.max(lv[k].ok || 0, (d.vocabStats[k] && d.vocabStats[k].ok) || 0);
+        lv[k].no = Math.max(lv[k].no || 0, (d.vocabStats[k] && d.vocabStats[k].no) || 0);
+      });
+      saveLocal("vocabStats", lv);
     }
     ["readings", "cycles", "errors", "settings", "promptIdx"].forEach(function (k) {
       if (d[k] !== undefined && d[k] !== null) saveLocal(k, d[k]);
@@ -2621,7 +2701,7 @@
   }
   $("#btnExportAll").addEventListener("click", function () {
     var out = { app: "english-writing-trainer", version: 2, exportedAt: new Date().toISOString(), data: {} };
-    ["settings", "journal", "readings", "cycles", "errors", "acts", "copyBest"].forEach(function (k) { out.data[k] = load(k, null); });
+    ["settings", "journal", "readings", "cycles", "errors", "acts", "vocabStats"].forEach(function (k) { out.data[k] = load(k, null); });
     downloadFile("writing-trainer-backup-" + todayISO() + ".json", JSON.stringify(out, null, 2));
     toast("Backup diekspor");
   });
@@ -2633,7 +2713,7 @@
       try {
         var obj = JSON.parse(reader.result);
         var payload = obj.data || obj; // terima format v2 maupun flat
-        var valid = ["journal", "readings", "cycles", "errors", "acts", "copyBest", "settings"].some(function (k) { return payload[k] !== undefined; });
+        var valid = ["journal", "readings", "cycles", "errors", "acts", "vocabStats", "settings"].some(function (k) { return payload[k] !== undefined; });
         if (!valid) { toast("File tidak dikenali"); return; }
         confirmBox("Import backup?", "Semua data saat ini akan ditimpa dengan isi file backup.", function () {
           Object.keys(payload).forEach(function (k) { if (payload[k] !== null) save(k, payload[k]); });

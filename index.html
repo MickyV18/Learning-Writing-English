@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="English Writing Trainer — sistem latihan menulis bahasa Inggris: journaling, copywork, extensive reading, draft-correct-rewrite, dan error log.">
+  <meta name="description" content="English Writing Trainer — sistem latihan menulis bahasa Inggris: journaling, latihan kosakata, extensive reading, draft-correct-rewrite, dan error log.">
   <title>English Writing Trainer</title>
   <meta name="theme-color" content="#101418">
   <link rel="manifest" href="manifest.json">
@@ -32,8 +32,8 @@
       <button class="nav-item" data-page="journal" title="Journaling">
         <span class="nav-ico">✎</span> <span class="nav-lbl">Journaling</span>
       </button>
-      <button class="nav-item" data-page="copywork" title="Copywork">
-        <span class="nav-ico">⧉</span> <span class="nav-lbl">Copywork</span>
+      <button class="nav-item" data-page="vocab" title="Kosakata">
+        <span class="nav-ico">📖</span> <span class="nav-lbl">Kosakata</span>
       </button>
       <button class="nav-item" data-page="reading" title="Reading">
         <span class="nav-ico">☰</span> <span class="nav-lbl">Reading</span>
@@ -91,7 +91,7 @@
       <div class="stat-grid">
         <div class="stat-card"><div class="stat-num" id="s-entries">0</div><div class="stat-lbl">Entri journal</div></div>
         <div class="stat-card"><div class="stat-num" id="s-sessions">0</div><div class="stat-lbl">Sesi cycle</div></div>
-        <div class="stat-card"><div class="stat-num" id="s-copybest">–</div><div class="stat-lbl">Copywork terbaik</div></div>
+        <div class="stat-card"><div class="stat-num" id="s-vocab">–</div><div class="stat-lbl">Kosakata dikuasai</div></div>
         <div class="stat-card"><div class="stat-num" id="s-errors">0</div><div class="stat-lbl">Kesalahan dicatat</div></div>
         <div class="stat-card"><div class="stat-num" id="s-words">0</div><div class="stat-lbl">Total kata ditulis</div></div>
       </div>
@@ -113,8 +113,8 @@
             <div class="progress"><div class="progress-fill" id="ck-journal"></div></div>
           </div>
           <div class="check-item">
-            <div class="check-label"><span>⧉</span> Copywork</div>
-            <div class="progress"><div class="progress-fill" id="ck-copy"></div></div>
+            <div class="check-label"><span>📖</span> Kosakata</div>
+            <div class="progress"><div class="progress-fill" id="ck-vocab"></div></div>
           </div>
           <div class="check-item">
             <div class="check-label"><span>☰</span> Reading note</div>
@@ -187,38 +187,45 @@
       </div>
     </section>
 
-    <!-- ---------- COPYWORK ---------- -->
-    <section class="page hidden" id="page-copywork">
+    <!-- ---------- KOSAKATA ---------- -->
+    <section class="page hidden" id="page-vocab">
       <div class="card">
-        <h2>Copywork (imitasi)</h2>
-        <p class="sub">Mode <b>Copy</b>: salin teks yang terlihat persis. Mode <b>Recall</b>: baca dulu, sembunyikan, lalu ketik dari ingatan — lebih menantang.</p>
-
+        <div class="card-head">
+          <h2>Kamus cepat</h2>
+          <span class="meta">butuh internet</span>
+        </div>
+        <p class="sub">Ketik kata bahasa Inggris yang sulit — langsung dapat arti, lafal, contoh kalimat, sinonim, antonim, dan terjemahan ke bahasa Indonesia.</p>
         <div class="row gap8 wrap">
-          <div class="seg" role="group" aria-label="Mode latihan">
-            <button class="seg-btn active" data-mode="copy">Copy</button>
-            <button class="seg-btn" data-mode="recall">Recall</button>
+          <input type="search" id="vSearch" class="input" style="flex:1;min-width:210px;"
+            placeholder="mis. meticulous, ubiquitous, procrastinate…" aria-label="Cari kata">
+          <button class="btn primary" id="btnVLookup" type="button">Cari maknanya</button>
+        </div>
+        <div id="vLookup" class="vlookup hidden mt8"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>Latihan kosakata</h2>
+          <div class="row gap8 wrap">
+            <select id="vLevel" class="input sm" aria-label="Level latihan"></select>
+            <button class="btn primary sm" id="btnVPractice" type="button">Mulai latihan</button>
           </div>
-          <select id="copySelect" class="input" style="max-width:340px;" aria-label="Pilih teks"></select>
         </div>
+        <p class="sub">8 soal campur: <b>arti → kata</b> (arti Indonesia, pilih kata Inggris), <b>kata → arti</b>, dan <b>tebak kata dari konteks</b> kalimat. Kata yang dijawab salah akan masuk daftar "perlu diulang".</p>
+        <div id="vPractice"></div>
+      </div>
 
-        <div id="customWrap" class="hidden">
-          <label class="field-label" for="customCopy">Teks latihanmu (tempel teks bahasa Inggris di sini)</label>
-          <textarea id="customCopy" class="textarea" rows="3" placeholder="Paste the English text you want to imitate…"></textarea>
+      <div class="card">
+        <div class="card-head">
+          <h2>Kosakata sulit</h2>
+          <div class="row gap8 wrap">
+            <select id="vTheme" class="input sm" style="max-width:190px;" aria-label="Tema"></select>
+            <input type="search" id="vFilter" class="input sm" style="max-width:190px;" placeholder="Filter kata…" aria-label="Filter kata">
+          </div>
         </div>
-
-        <div class="target-box" id="copyTarget" aria-label="Teks target"></div>
-        <div class="recall-note hidden" id="recallNote">🙈 Teks disembunyikan (mode Recall). Baca sekali, lalu ketik dari ingatan. Klik “Cek” untuk memunculkannya kembali.</div>
-
-        <textarea id="copyInput" class="textarea" rows="7" placeholder="Retype the text here…"></textarea>
-
-        <div class="editor-foot">
-          <span class="meta" id="copyAcc">Akurasi: –</span>
-          <span class="meta" id="copyBestNote"></span>
-          <div class="spacer"></div>
-          <button class="btn ghost" id="btnCopyReset" type="button">Reset</button>
-          <button class="btn primary" id="btnCopyCheck">Cek akurasi</button>
-        </div>
-        <div class="result-box hidden" id="copyResult" aria-live="polite"></div>
+        <p class="sub">Klik kartunya untuk melihat contoh kalimat, terjemahan, sinonim, kolokasi, dan asal kata.</p>
+        <div class="meta" id="vSummary"></div>
+        <div id="vList" class="stack"></div>
       </div>
     </section>
 
@@ -428,11 +435,11 @@
         <p class="sub">Kerangka sederhana yang menggabungkan kelima metode. Sesuaikan jadwalnya — yang penting rutin.</p>
         <div class="plan-list">
           <div class="plan-row"><b>Senin</b><span>Journaling 150 kata + baca 1 artikel dengan catatan struktur</span></div>
-          <div class="plan-row"><b>Selasa</b><span>Copywork 1 teks + simpan kolokasi baru ke Reading</span></div>
+          <div class="plan-row"><b>Selasa</b><span>Latihan kosakata 8 soal + simpan kolokasi baru ke Reading</span></div>
           <div class="plan-row"><b>Rabu</b><span>Journaling topik opini + tinjau Error Log lama</span></div>
           <div class="plan-row"><b>Kamis</b><span>Cycle penuh: Draft → Correct → Rewrite (1 paragraf)</span></div>
           <div class="plan-row"><b>Jumat</b><span>Journaling + tambahkan kesalahan minggu ini ke Error Log</span></div>
-          <div class="plan-row"><b>Sabtu</b><span>Copywork mode Recall atau Cycle — tinjau streak &amp; catatan</span></div>
+          <div class="plan-row"><b>Sabtu</b><span>Ulangi kosakata yang salah atau Cycle — tinjau streak &amp; catatan</span></div>
           <div class="plan-row"><b>Minggu</b><span>Rewrite tanpa melihat: ambil draft lama, tulis finalnya</span></div>
         </div>
       </div>
@@ -546,7 +553,7 @@
 
       <div class="card">
         <h2>Tentang</h2>
-        <p class="sub">English Writing Trainer v2 — implementasi lima metode latihan writing: journaling rutin, copywork/imitasi, extensive reading, siklus draft–correct–rewrite, dan error log, dengan pelacakan streak untuk menjaga konsistensi.</p>
+        <p class="sub">English Writing Trainer v2 — implementasi lima metode latihan writing: journaling rutin, latihan kosakata, extensive reading, siklus draft–correct–rewrite, dan error log, dengan pelacakan streak untuk menjaga konsistensi.</p>
       </div>
     </section>
 
@@ -570,6 +577,7 @@
 
 <script src="js/firebase-config.js"></script>
 <script src="js/writing.js"></script>
+<script src="js/vocab.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
