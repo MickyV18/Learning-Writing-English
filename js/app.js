@@ -1648,6 +1648,59 @@
     $("#readNotes").focus();
     toast("Sumber terisi — tulis catatan pola yang kamu temukan");
   });
+
+  /* ---------- mode baca imersif (layar penuh) ---------- */
+  function readFsBtn(txt) { var b = $("#btnReadFS"); if (b) b.textContent = txt; }
+  function readFsExitUI() {
+    var pane = $("#readPane");
+    if (pane) pane.classList.remove("read-fs");
+    document.body.classList.remove("read-fs-lock");
+    readFsBtn("⛶ Layar penuh");
+  }
+  function readFsEnter() {
+    var pane = $("#readPane");
+    if (!pane || pane.classList.contains("hidden")) { toast("Ambil bacaan dulu."); return; }
+    pane.classList.add("read-fs");
+    document.body.classList.add("read-fs-lock");
+    readFsBtn("✕ Keluar layar penuh");
+    var req = pane.requestFullscreen || pane.webkitRequestFullscreen || pane.msRequestFullscreen;
+    if (req) {
+      try { var p = req.call(pane); if (p && p.catch) p.catch(function () { }); } catch (e) { }
+    }
+    try { pane.scrollTop = 0; $("#readBody").scrollTop = 0; } catch (e) { }
+  }
+  $("#btnReadFS").addEventListener("click", function () {
+    var pane = $("#readPane");
+    if (!pane) return;
+    var on = pane.classList.contains("read-fs");
+    var inNative = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!on) { readFsEnter(); return; }
+    // keluar: CSS mode dulu, lalu native (jika masih aktif)
+    readFsExitUI();
+    if (inNative) {
+      var ex = document.exitFullscreen || document.webkitExitFullscreen;
+      if (ex) { try { var p = ex.call(document); if (p && p.catch) p.catch(function () { }); } catch (e) { } }
+    }
+  });
+  ["fullscreenchange", "webkitfullscreenchange"].forEach(function (ev) {
+    document.addEventListener(ev, function () {
+      var inNative = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!inNative) readFsExitUI();
+      else {
+        var el = inNative;
+        if (el && el.id === "readPane") {
+          el.classList.add("read-fs");
+          document.body.classList.add("read-fs-lock");
+          readFsBtn("✕ Keluar layar penuh");
+        }
+      }
+    });
+  });
+  document.addEventListener("keydown", function (e) {
+    var pane = $("#readPane");
+    if (e.key === "Escape" && pane && pane.classList.contains("read-fs") &&
+      !(document.fullscreenElement || document.webkitFullscreenElement)) readFsExitUI();
+  });
   syncReadSrc($("#readSrcSel").value);
   readArticle = load("readLast", null);
   if (readArticle && readArticle.text) renderReadArticle();

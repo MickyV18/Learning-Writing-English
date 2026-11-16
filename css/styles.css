@@ -478,3 +478,21 @@ textarea{ min-height:110px; }
 .read-body.prose{ font-size:16.5px; line-height:1.85; font-family:Georgia,'Times New Roman',serif; }
 .read-body.prose p{ margin:0 0 16px; max-width:75ch; }
 .read-body.prose .read-h{ font-family:inherit; font-size:17px; }
+
+/* ---------- mode baca imersif ---------- */
+body.read-fs-lock{ overflow:hidden; }
+.read-fs{
+  position:fixed; inset:0; z-index:80; overflow-y:auto;
+  background:var(--bg); margin:0; padding:18px 22px 60px;
+}
+.read-fs .read-body{
+  max-height:none; height:auto; max-width:820px; margin:0 auto;
+  font-size:19px; line-height:1.9; padding:24px 30px;
+}
+.read-fs .read-body.prose{ font-size:21px; line-height:2; }
+.read-fs .read-body.prose p{ max-width:70ch; margin:0 auto 20px; }
+.read-fs .row{ max-width:860px; margin:0 auto 14px; }
+@media (max-width:600px){
+  .read-fs{ padding:12px 12px 48px; }
+  .read-fs .read-body{ font-size:17px; padding:16px 16px; }
+}
