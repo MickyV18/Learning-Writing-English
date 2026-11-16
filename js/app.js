@@ -699,6 +699,31 @@
   var vRound = [], vPhase = "idle", vIdx = 0, vCorrect = 0, vWrong = [], vAnswered = 0;
   var vSeen = load("vSeen", []);   // kata yang sudah pernah dibagikan (putaran terakhir)
 
+  /* sesi latihan disimpan — halaman ditutup pun lanjut di tempat terakhir */
+  function vSaveSession() {
+    try {
+      save("vocabSess", vRound.length ? {
+        phase: vPhase, idx: vIdx, correct: vCorrect, answered: vAnswered, wrong: vWrong,
+        round: vRound.map(function (r) { return { w: r.w, ok: !!r.ok, typed: r.typed || "", graded: !!r.graded, matched: r.matched || "" }; })
+      } : null);
+    } catch (e) { }
+  }
+  function vRestoreSession() {
+    var s = load("vocabSess", null);
+    if (!s || !s.round || !s.round.length) return;
+    vRound = s.round.map(function (r) {
+      return { w: r.w, ok: !!r.ok, typed: r.typed || "", graded: !!r.graded, matched: r.matched || "" };
+    });
+    vPhase = s.phase || "learn";
+    vIdx = Math.min(s.idx || 0, Math.max(0, vRound.length - 1));
+    vCorrect = s.correct || 0; vWrong = s.wrong || []; vAnswered = s.answered || 0;
+    if (vPhase === "test") {
+      while (vIdx < vRound.length && vRound[vIdx].graded) vIdx++;   // lewati yang sudah dijawab
+      if (vIdx >= vRound.length) vPhase = "done";
+    }
+    renderVocabPractice();
+  }
+
   function vPool() {
     var pool = VOCAB.filter(function (w) {
       if (vLevel !== "all" && w.lv !== vLevel) return false;
@@ -735,6 +760,7 @@
     renderVocabPractice();
   }
   function renderVocabPractice() {
+    vSaveSession();
     var el = $("#vPractice"); el.innerHTML = "";
     if (!vRound.length) {
       el.innerHTML = '<div class="meta">Tekan <b>Ambil 5 kata baru</b> — kamu akan diberi 5 kata sulit, hafalkan artinya, lalu ditanya satu per satu secara acak.</div>';
@@ -826,7 +852,8 @@
       box.appendChild(next);
       $("#btnVNext").addEventListener("click", function () {
         vIdx++;
-        vPhase = vIdx >= vRound.length ? "done" : "test";
+        if (vIdx >= vRound.length) { vPhase = "done"; finishVocabRound(); }
+        else vPhase = "test";
         renderVocabPractice();
       });
       var sc = $("#vScore");
@@ -854,7 +881,6 @@
     renderVocabList();
   }
   function renderVResult() {
-    finishVocabRound();
     var el = $("#vPractice");
     var pct = Math.round(vCorrect / vRound.length * 100);
     var box = document.createElement("div");
@@ -936,6 +962,7 @@
     renderVocabList();
   }
   fillVocabControls();
+  vRestoreSession();   // lanjutkan sesi latihan yang tersimpan
 
   /* ---------------- reading ---------------- */
   $("#btnSaveReading").addEventListener("click", function () {
@@ -1437,15 +1464,23 @@
         if (freq[w] === 1 && w.length >= 5 && !used[w] && rare.indexOf(w) > -1) { placed = words[k]; break; }
       }
       if (placed === null) continue;
-      used[placed.toLowerCase()] = true;
-      var distractors = shuffleArr(rare.filter(function (x) { return used[x] !== true && x !== placed.toLowerCase() && Math.abs(x.length - placed.length) <= 4; })).slice(0, 3);
-      while (distractors.length < 3 && rare.length > 3) {
-        var add = shuffleArr(rare.filter(function (x) { return used[x] !== true; }))[0];
+      var low = placed.toLowerCase();
+      used[low] = true;
+      // pengecoh makin mirip: prioritas akhiran sama + panjang dekat → sulit dibedakan
+      var cands = rare.filter(function (x) { return used[x] !== true && x !== low; });
+      var sfx = low.slice(-2);
+      var close = cands.filter(function (x) { return x.slice(-2) === sfx && Math.abs(x.length - low.length) <= 3; });
+      var mid = cands.filter(function (x) { return x.slice(-2) === sfx; });
+      var near = cands.filter(function (x) { return Math.abs(x.length - low.length) <= 4; });
+      var distractors = shuffleArr(close.length >= 3 ? close : (mid.length >= 3 ? mid : near)).slice(0, 3);
+      while (distractors.length < 3 && cands.length) {
+        var add = shuffleArr(cands)[0];
         if (!add || distractors.indexOf(add) > -1) break;
         distractors.push(add);
       }
       if (distractors.length < 3) continue;
-      out.push({ kind: "cloze", sent: s, answer: placed.toLowerCase(), options: shuffleArr([placed.toLowerCase()].concat(distractors)), done: false, ok: false });
+      var copts = shuffleArr([low].concat(distractors));
+      out.push({ kind: "cloze", sent: s, answer: low, options: copts, ai: copts.indexOf(low), done: false, ok: false });
     }
     return out;
   }
@@ -1481,7 +1516,8 @@
       if (usedCat[cd.cat] || usedSent[cd.sent]) continue;        // 1 kategori per soal → bervariasi
       var dis = shuffleArr(CATS[cd.cat].filter(function (x) { return x !== cd.w; })).slice(0, 3);
       if (dis.length < 3) continue;
-      out.push({ kind: "gram", sent: cd.sent, answer: cd.w, options: shuffleArr([cd.w].concat(dis)), done: false, ok: false });
+      var gopts = shuffleArr([cd.w].concat(dis));
+      out.push({ kind: "gram", sent: cd.sent, answer: cd.w, options: gopts, ai: gopts.indexOf(cd.w), done: false, ok: false });
       usedCat[cd.cat] = true; usedSent[cd.sent] = true;
     }
     return out;
@@ -1495,17 +1531,20 @@
       if (!m) return;
       var ans = m[0], n = parseFloat(ans);
       if (!isFinite(n) || n === 0 || used[ans]) return;
+      // pengecoh dekat: ±1, tukar digit, kali/dua, +10% — angka mirip jadi sulit
+      var swap = (n >= 10 && n <= 99) ? parseInt(String(Math.floor(n)).split("").reverse().join(""), 10) : NaN;
       var ds = [];
-      [n * 2, Math.round(n / 2), n + (n < 10 ? 2 : Math.max(10, Math.round(n * 0.1)))].forEach(function (v) {
-        if (isFinite(v) && v !== n && String(v) !== ans && ds.indexOf(String(v)) === -1 && ds.length < 3) ds.push(String(v));
+      [n + 1, n - 1, n * 2, Math.round(n / 2), n + Math.max(10, Math.round(n * 0.1)), swap].forEach(function (v) {
+        if (isFinite(v) && v !== n && v > 0 && String(v) !== ans && ds.indexOf(String(v)) === -1 && ds.length < 3) ds.push(String(v));
       });
       if (ds.length < 3) return;
       used[ans] = true;
-      out.push({ kind: "detail", sent: s, answer: ans, options: shuffleArr([ans].concat(ds)), done: false, ok: false });
+      var nopts = shuffleArr([ans].concat(ds));
+      out.push({ kind: "detail", sent: s, answer: ans, options: nopts, ai: nopts.indexOf(ans), done: false, ok: false });
     });
     return out;
   }
-  // kalimat mana yang muncul di teks — pengecoh diambil dari passage lain
+  // kalimat mana yang muncul di teks — pengecoh dari teks lain, prioritas yang memakai kata kunci sama
   function buildSentQ() {
     var cands = splitSents(readArticle.text).filter(function (s) {
       var w = s.split(/\s+/).length;
@@ -1514,7 +1553,8 @@
     if (!cands.length) return null;
     var ans = cands[Math.floor(Math.random() * cands.length)];
     var norm = function (s) { return s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim(); };
-    var an = norm(ans), dis = [], tried = {}, pool = [];
+    var an = norm(ans), anW = contentWords(ans);
+    var pool = [];
     READ_LIBRARY.forEach(function (p) {
       if (p.x === readArticle.text) return;
       splitSents(p.x).forEach(function (s) {
@@ -1522,14 +1562,132 @@
         if (w >= 8 && w <= 24) pool.push(s);
       });
     });
-    shuffleArr(pool).forEach(function (s) {
+    var dis = [], tried = {};
+    pool.map(function (s) {
+      var shared = contentWords(s).filter(function (w) { return anW.indexOf(w) > -1; }).length;
+      return { s: s, n: shared };
+    }).sort(function (a, b) { return b.n - a.n; }).forEach(function (o) {
+      var n = norm(o.s);
+      if (n === an || tried[n] || dis.length >= 3 || o.n === 0) return;
+      tried[n] = true; dis.push(o.s);
+    });
+    if (dis.length < 3) shuffleArr(pool).forEach(function (s) {   // fallback: teks asing pun boleh
       var n = norm(s);
       if (n === an || tried[n] || dis.length >= 3) return;
       tried[n] = true; dis.push(s);
     });
     if (dis.length < 3) return null;
-    return { kind: "sent", text: "Kalimat manakah yang muncul di dalam teks?", answer: ans, options: shuffleArr([ans].concat(dis)), done: false, ok: false };
+    var opts = shuffleArr([ans].concat(dis));
+    return { kind: "sent", text: "Kalimat manakah yang muncul di dalam teks?", answer: ans, options: opts, ai: opts.indexOf(ans), done: false, ok: false };
   }
+
+  /* ---------- kata konten (bantu soal gagasan utama & pengecoh mirip) ---------- */
+  var STOP_EN = { the: 1, a: 1, an: 1, and: 1, or: 1, but: 1, of: 1, to: 1, in: 1, on: 1, at: 1, for: 1,
+    with: 1, is: 1, are: 1, was: 1, were: 1, be: 1, been: 1, it: 1, its: 1, this: 1, that: 1, these: 1,
+    those: 1, as: 1, by: 1, from: 1, they: 1, their: 1, them: 1, we: 1, our: 1, you: 1, your: 1, he: 1,
+    she: 1, his: 1, her: 1, not: 1, no: 1, can: 1, will: 1, would: 1, could: 1, should: 1, have: 1,
+    has: 1, had: 1, do: 1, does: 1, did: 1, more: 1, most: 1, than: 1, then: 1, when: 1, while: 1,
+    about: 1, into: 1, over: 1, after: 1, before: 1, some: 1, all: 1, one: 1, two: 1, who: 1, what: 1,
+    there: 1, here: 1, because: 1, so: 1, if: 1, other: 1, also: 1, very: 1, only: 1 };
+  function contentWords(s) {
+    return (String(s || "").toLowerCase().match(/[a-z][a-z'-]{2,}/g) || []).filter(function (w) { return !STOP_EN[w]; });
+  }
+
+  /* ---------- soal gagasan utama ---------- */
+  // jawaban: kalimat paling mewakili (judul + frekuensi kata + posisi pembuka/penutup);
+  // pengecoh: kalimat teks yang sama yang memakai kata kunci yang sama — detail sungguhan, tapi terlalu sempit
+  function buildMainQ(sents) {
+    if (!readArticle || sents.length < 5) return null;
+    var titleW = contentWords(readArticle.title);
+    var freq = {};
+    (readArticle.text.toLowerCase().match(/[a-z][a-z'-]{2,}/g) || []).forEach(function (w) { freq[w] = (freq[w] || 0) + 1; });
+    var norm = function (s) { return s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim(); };
+    var scored = sents.map(function (s, i) {
+      var ws = contentWords(s), t = 0, f = 0;
+      ws.forEach(function (w) { if (titleW.indexOf(w) > -1) t++; f += Math.min(freq[w] || 0, 6); });
+      var pos = i < 3 ? 3 : (i >= sents.length - 2 ? 1 : 0);
+      return { s: s, sc: t * 3 + pos + f / 8 };
+    }).sort(function (a, b) { return b.sc - a.sc; });
+    var best = scored[0];
+    var anW = contentWords(best.s), an = norm(best.s);
+    var dis = [], tried = {};
+    scored.slice(1).forEach(function (o) {
+      if (dis.length >= 3) return;
+      var n = norm(o.s);
+      if (n === an || tried[n]) return;
+      var shared = contentWords(o.s).filter(function (w) { return anW.indexOf(w) > -1; }).length;
+      var w = o.s.split(/\s+/).length;
+      if (shared >= 1 && w >= 8 && w <= 26) { tried[n] = 1; dis.push(o.s); }
+    });
+    if (dis.length < 3) {
+      scored.slice(1).forEach(function (o) {
+        if (dis.length >= 3) return;
+        var n = norm(o.s);
+        if (n === an || tried[n]) return;
+        tried[n] = 1; dis.push(o.s);
+      });
+    }
+    if (dis.length < 3) return null;
+    var stems = ["Gagasan utama teks ini adalah…",
+      "Kalimat yang paling menggambarkan isi teks secara keseluruhan adalah…",
+      "Pesan yang dikembangkan teks ini adalah…"];
+    var opts = shuffleArr([best.s].concat(dis));
+    return { kind: "main", text: stems[Math.floor(Math.random() * stems.length)], answer: best.s, options: opts, ai: opts.indexOf(best.s), done: false, ok: false };
+  }
+
+  /* bank gagasan utama tulisan tangan utk teks latihan bawaan — pengecoh sengaja mirip */
+  var READ_MI = {
+    "The Lost Wallet": { q: "What is the main idea of the text?",
+      o: ["Honesty can turn a stranger into a friend",
+        "Friendship begins when neighbours invite each other for tea",
+        "Returning lost money is the best way to gain a neighbour's trust",
+        "People who live alone often feel grateful for small kindnesses"], a: 0 },
+    "Bread at Home": { q: "What is the main idea of the text?",
+      o: ["Making bread at home is simple if you follow a few patient steps",
+        "Bread tastes best when it is cut while still warm from the oven",
+        "The hardest part of baking bread is mixing the flour and salt",
+        "Homemade bread needs expensive tools and special ingredients"], a: 0 },
+    "The Night Bus": { q: "What is the main idea of the text?",
+      o: ["A forgotten bag turned strangers on a night bus into friends",
+        "Lost things on buses usually return to their owners with police help",
+        "The night bus was slow, so Diego missed his stop and lost the bag",
+        "The friendliest passengers are the ones who stay awake on the trip"], a: 0 },
+    "Why Do We Yawn?": { q: "What is the main idea of the text?",
+      o: ["Yawning cools the brain, and seeing others yawn makes us copy them",
+        "Yawning spreads because tired brains need oxygen at the same time",
+        "Scientists have proven that yawning is caused mainly by tiredness",
+        "Empathy makes people yawn because they breathe the same air"], a: 0 },
+    "The Rise of Working from Home": { q: "What is the main idea of the text?",
+      o: ["Home working brings real benefits and real costs, so a mix of both is becoming the future",
+        "Companies save the most money when employees stay at home full-time",
+        "Loneliness is the main reason people are returning to the office",
+        "Managers no longer trust employees whom they cannot see in person"], a: 0 },
+    "Bees in Trouble": { q: "What is the main idea of the text?",
+      o: ["Bees support a third of our food but are disappearing, and both small actions and laws can help",
+        "Pesticides are the single biggest danger to bees around the world",
+        "Beekeepers lose most of their colonies every year to varroa mites",
+        "Governments have already solved the bee crisis by banning pesticides"], a: 0 },
+    "The Paradox of Choice": { q: "What is the main idea of the text?",
+      o: ["More options raise expectations and regret, so choosing a good-enough option brings more happiness",
+        "Maximisers are unhappy because they never manage to make good choices",
+        "Regret after choosing comes mainly from making the wrong decision",
+        "Stores should reduce their products because customers cannot decide"], a: 0 },
+    "Learning a Language as an Adult": { q: "What is the main idea of the text?",
+      o: ["Adults learn languages well when they speak early, accept mistakes, and practise a little every day",
+        "Children learn languages better than adults in almost every way",
+        "Studying grammar is the fastest route to fluency for adult learners",
+        "Adults fail at languages because they have far less free time than children"], a: 0 },
+    "A Short History of Tea": { q: "What is the main idea of the text?",
+      o: ["From Chinese medicine to a worldwide ritual, tea changed trade and history",
+        "Tea became popular in Europe because it was cheap and considered healthy",
+        "The Japanese tea ceremony is the most important part of tea's story",
+        "India grows more tea than any other country in the world today"], a: 0 },
+    "Sleep and the Teenage Brain": { q: "What is the main idea of the text?",
+      o: ["Teenage biology makes early school times harmful, and later starts show real benefits",
+        "Teenagers are lazy because they stay awake until midnight by choice",
+        "A weekend of long sleep can fully repay the sleep debt of the week",
+        "Later school start times would solve most problems in education"], a: 0 }
+  };
 
   function buildReadQuiz() {
     if (readArticle && readArticle.libQs) { buildLibQuiz(); return; }
@@ -1537,16 +1695,23 @@
       var w = s.split(/\s+/).length;
       return w >= 6 && w <= 30;
     });
-    var cloze = buildClozeQs(sents, 5);
-    var qs = cloze.slice(0, 3).concat(buildGramQs(sents, 3)).concat(buildNumQs(sents, 2));
-    if (qs.length < 6) qs = qs.concat(cloze.slice(3, 3 + (6 - qs.length)));   // teks miskin → isi cloze ekstra
+    var cloze = buildClozeQs(sents, 4);
+    var qs = [];
+    var mainQ = buildMainQ(sents);
+    if (mainQ) qs.push(mainQ);
+    qs = qs.concat(cloze.slice(0, 2)).concat(buildGramQs(sents, 2)).concat(buildNumQs(sents, 1));
+    var sq = buildSentQ();
+    if (sq) qs.push(sq);
+    if (qs.length < 8) qs = qs.concat(cloze.slice(2, 2 + (8 - qs.length)));   // teks miskin → isi cloze ekstra
+    shuffleArr(qs);   // urutan acak — soal gagasan utama tidak selalu di awal
     readQuestions = qs.slice(0, 8);
     readDone = 0; readCorrect = 0;
     renderReadQuiz();
   }
-  // kuis dari teks latihan bawaan: 4 soal pemahaman asli + 5 soal generator (lebih berat & bervariasi)
+  // kuis teks latihan bawaan: 4 soal asli + 1 gagasan utama + 5 soal generator (lebih berat & bervariasi)
   function buildLibQuiz() {
-    var hand = shuffleArr(readArticle.libQs.slice(0)).map(function (q) {
+    var libQs = readArticle.libQs;
+    var hand = shuffleArr(libQs.filter(function (q) { return !q.m; })).map(function (q) {
       var options = shuffleArr(q.o.slice(0));
       return { kind: "lib", text: q.q, options: options, ai: options.indexOf(q.o[q.a]), done: false, ok: false };
     });
@@ -1554,10 +1719,18 @@
       var w = s.split(/\s+/).length;
       return w >= 6 && w <= 30;
     });
+    var mi = libQs.filter(function (q) { return q.m; })[0];
+    var mainQ = null;
+    if (mi) {
+      var mo = shuffleArr(mi.o.slice(0));
+      mainQ = { kind: "main", text: mi.q, options: mo, ai: mo.indexOf(mi.o[mi.a]), done: false, ok: false };
+    } else {
+      mainQ = buildMainQ(sents);
+    }
     var auto = buildGramQs(sents, 2).concat(buildClozeQs(sents, 1)).concat(buildNumQs(sents, 1));
     var sq = buildSentQ();
     if (sq) auto.push(sq);
-    readQuestions = hand.concat(auto);
+    readQuestions = (mainQ ? [mainQ] : []).concat(hand).concat(auto);
     readDone = 0; readCorrect = 0;
     renderReadQuiz();
   }
@@ -1572,20 +1745,21 @@
     readQuestions.forEach(function (q, qi) {
       var li = document.createElement("div");
       li.className = "entry rq";
-      var KIND_LBL = { lib: "pemahaman", cloze: "kosakata", gram: "grammar", detail: "detail angka", sent: "kalimat dari teks" };
-      // cloze/gram/detail: sisip titik blank; lib/sent: pertanyaan utuh
+      var KIND_LBL = { lib: "pemahaman", main: "gagasan utama", cloze: "kosakata", gram: "grammar", detail: "detail angka", sent: "kalimat dari teks" };
+      // cloze/gram/detail: sisip titik blank; lib/sent/main: pertanyaan utuh
       var bodyHtml;
-      if (q.kind === "lib" || q.kind === "sent") bodyHtml = esc(q.text);
+      if (q.kind === "lib" || q.kind === "sent" || q.kind === "main") bodyHtml = esc(q.text);
       else {
         var re = new RegExp("\\b" + q.answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i");
         bodyHtml = esc(q.sent.replace(re, "______"));
       }
+      var longOpt = q.kind === "sent" || q.kind === "main";
       li.innerHTML =
         '<div class="entry-head"><span class="tag q-num">Soal ' + (qi + 1) + (KIND_LBL[q.kind] ? " • " + KIND_LBL[q.kind] : "") + "</span></div>" +
         '<div class="entry-body" style="display:block;">' + bodyHtml + "</div>" +
-        '<div class="row wrap gap8' + (q.kind === "sent" ? " opt-col" : "") + '" style="margin-top:8px;">' +
+        '<div class="row wrap gap8' + (longOpt ? " opt-col" : "") + '" style="margin-top:8px;">' +
         q.options.map(function (o, oi) {
-          return '<button class="btn ghost sm opt-btn' + (q.kind === "sent" ? " opt-long" : "") + '" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
+          return '<button class="btn ghost sm opt-btn' + (longOpt ? " opt-long" : "") + '" data-q="' + qi + '" data-o="' + oi + '"' + (q.done ? " disabled" : "") + ">" + esc(o) + "</button>";
         }).join("") +
         "</div>";
       el.appendChild(li);
@@ -1599,9 +1773,9 @@
     var q = readQuestions[qi];
     if (!q || q.done) return;
     q.done = true;
-    q.ok = q.kind === "lib" ? (oi === q.ai) : (q.options[oi] === q.answer);
+    q.ok = oi === q.ai;                    // semua jenis soal kini memakai indeks jawaban
     readDone++; if (q.ok) readCorrect++;
-    var ci = q.kind === "lib" ? q.ai : q.options.indexOf(q.answer); // tombol jawaban benar
+    var ci = q.ai;                          // tombol jawaban benar
     $$("#readQList .opt-btn").forEach(function (btn) {
       if (+btn.dataset.q !== qi) return;
       btn.disabled = true;
