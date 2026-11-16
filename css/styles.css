@@ -272,6 +272,11 @@ textarea{ min-height:110px; }
 .v-feed-arti .v-ex.v-id{ color:var(--muted); font-size:12.5px; margin-top:4px; }
 
 /* ---------- penilaian tulisan 0-100 ---------- */
+.j-score{
+  margin:0 0 6px; padding:8px 12px; border-left:3px solid var(--accent);
+  background:var(--accent-soft); border-radius:8px; font-size:13px;
+}
+.j-score b{ font-size:14px; }
 .score-box{
   margin-top:12px; border:1px solid var(--border); border-radius:12px;
   background:var(--surface-2); padding:16px 18px;

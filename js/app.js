@@ -410,18 +410,40 @@
     }
     return h;
   }
-  function renderScorePanel() {
-    var el = $("#jScore");
-    if (!el || !window.EWTWriting) return;
-    var text = ($("#jText").value || "");
-    if (!text.trim()) { el.classList.add("hidden"); return; }
+  /* hitung skor tulisan aktif — dipakai panel penilaian & disimpan ke entri */
+  function currentScore(textOverride) {
+    if (!window.EWTWriting) return null;
+    var text = (textOverride !== undefined) ? textOverride : ($("#jText").value || "");
+    if (!String(text || "").trim()) return null;
     var res = window.EWTWriting.score(text, {
       prompt: writePrompt ? writePrompt.q : "",
       issues: jChecked ? jIssues : undefined,
       issuesSource: jLastWasLT ? "lt" : "local",
       target: writePrompt ? (writePrompt.min || 120) : 120
     });
-    el.innerHTML = scoreHtml(res);
+    return {
+      total: res.total, band: res.band, cefr: res.cefr, stats: res.stats,
+      dims: res.dims.map(function (d) { return { label: d.label, score: d.score, max: d.max, note: d.note }; }),
+      tips: res.tips.slice(0, 8),
+      at: todayISO()
+    };
+  }
+  /* ringkasan skor untuk daftar entri (tanpa panel penuh) */
+  function scoreLine(sc) {
+    if (!sc) return "";
+    var dims = (sc.dims || []).map(function (d) { return d.label + " " + d.score + "/" + d.max; }).join(" · ");
+    return '<div class="j-score"><b>Skor ' + sc.total + "/100</b> · " + esc(sc.band) +
+      " · CEFR " + esc(sc.cefr) +
+      (dims ? '<div class="meta">' + esc(dims) + "</div>" : "") + "</div>";
+  }
+  function renderScorePanel() {
+    var el = $("#jScore");
+    if (!el || !window.EWTWriting) return;
+    var text = ($("#jText").value || "");
+    if (!text.trim()) { el.classList.add("hidden"); return; }
+    var sc = currentScore(text);
+    if (!sc) { el.classList.add("hidden"); return; }
+    el.innerHTML = scoreHtml(sc);
     el.classList.remove("hidden");
   }
   $("#btnJScore").addEventListener("click", function () {
@@ -453,12 +475,13 @@
   $("#btnSaveJournal").addEventListener("click", function () {
     var txt = jText.value.trim();
     if (!txt) { toast("Tulis sesuatu dulu 🙂"); return; }
+    var sc = currentScore(txt);          // skor 0-100 ikut tersimpan di entri
     var list = load("journal", []);
     list.unshift({
       id: uid(), date: todayISO(),
       topic: writePrompt ? writePrompt.g : "",
       prompt: writePrompt ? writePrompt.q : "",
-      words: countWords(txt), text: txt
+      words: countWords(txt), text: txt, score: sc
     });
     save("journal", list);
     jText.value = ""; save("draftJournal", "");
@@ -479,10 +502,11 @@
         '<div class="entry-head">' +
         '<span class="tag">' + esc(it.topic) + "</span>" +
         "<b>" + it.words + " kata</b>" +
+        (it.score ? '<span class="tag lv">Skor ' + it.score.total + " · " + esc(it.score.cefr) + "</span>" : "") +
         '<span class="meta">' + fmtDate(it.date) + "</span>" +
         '<button class="icon-btn entry-del" data-del="' + it.id + '" title="Hapus entri">✕</button>' +
         "</div>" +
-        '<div class="entry-body">' + esc(it.text) + "</div>";
+        '<div class="entry-body">' + scoreLine(it.score) + esc(it.text) + "</div>";
       el.appendChild(li);
     });
     if (!shown.length) el.innerHTML = '<div class="entry meta">' + (list.length ? "Tidak ada entri yang cocok." : "Belum ada entri. Mulai tulis hari ini!") + "</div>";
